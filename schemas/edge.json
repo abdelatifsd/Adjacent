@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjacent.dev/schemas/edge/v1",
+  "title": "RecommendationEdge",
+  "description": "A lazily constructed, evidence-backed relationship between two products used for cold-start recommendations. All v1 edge types are symmetric and MUST be stored canonically: set (from_id, to_id) such that from_id <= to_id, and generate edge_id from (edge_type, from_id, to_id). Query neighbors by matching either endpoint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["edge_id", "edge_type", "from_id", "to_id"],
+
+  "properties": {
+    "edge_id": {
+      "type": "string",
+      "description": "Stable identifier for the edge (e.g. hash of edge_type + from_id + to_id after canonical ordering)."
+    },
+
+    "edge_type": {
+      "type": "string",
+      "enum": [
+        "SIMILAR_TO",
+        "COMPLEMENTS",
+        "SUBSTITUTE_FOR",
+        "OFTEN_USED_WITH"
+      ],
+      "description": "Canonical relationship type used for recommendation logic. In v1, all relationship types are symmetric."
+    },
+
+    "from_id": {
+      "type": "string",
+      "description": "Canonical endpoint A for this edge. In v1, edges are symmetric and MUST be stored with from_id <= to_id."
+    },
+
+    "to_id": {
+      "type": "string",
+      "description": "Canonical endpoint B for this edge. In v1, edges are symmetric and MUST be stored with from_id <= to_id."
+    },
+
+    "confidence_0_to_1": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Derived confidence score based on distinct-anchor reinforcement and heuristic saturation (e.g. capped exponential over anchors_seen count)."
+    },
+
+    "anchors_seen": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Set of distinct query anchors under which this edge was observed or reinforced. Repeated appearances under the same anchor MUST NOT increase confidence."
+    },
+
+    "status": {
+      "type": "string",
+      "enum": ["PROPOSED", "ACTIVE", "DISPUTED"],
+      "default": "PROPOSED",
+      "description": "Lifecycle state of the edge. PROPOSED = newly inferred with limited evidence, ACTIVE = sufficiently reinforced by distinct anchors, DISPUTED = low confidence or invalidated by later checks."
+    },
+
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the edge was first created."
+    },
+
+    "last_reinforced_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of the most recent reinforcement event (i.e., when a new distinct anchor was added)."
+    },
+
+    "notes": {
+      "type": "string",
+      "description": "Optional human- or system-generated explanation for why this edge exists."
+    },
+
+    "edge_props": {
+      "type": "object",
+      "default": {},
+      "description": "Edge-type-specific properties (must be flat: primitives or arrays of primitives)."
+    }
+  }
+}

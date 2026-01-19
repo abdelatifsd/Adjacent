@@ -16,7 +16,7 @@ neo4j-start:
 	@docker run \
 	--name adjacent-neo4j \
 	-p 7475:7474 -p 7688:7687 \
-	-e NEO4J_AUTH=neo4j/chipkg123 \
+	-e NEO4J_AUTH=neo4j/adjacent123 \
 	-v $$(PWD)/neo4j-data:/data \
 	neo4j:5
 

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjacent.dev/schemas/product/v1",
+  "title": "Product",
+  "description": "Canonical product record for Adjacent ingestion. Required fields are id and description. Optional fields support richer prompts and retrieval later.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "description"],
+
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable product identifier. Must be unique within the catalog."
+    },
+
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable product title."
+    },
+
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Primary semantic text used for embedding and LLM inference."
+    },
+
+    "brand": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Brand or manufacturer."
+    },
+
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Primary category label."
+    },
+
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": [],
+      "description": "Optional keyword tags."
+    },
+
+    "price": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Numeric price in the given currency."
+    },
+
+    "currency": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Currency code or symbol, e.g. USD."
+    },
+
+    "image_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional image URL."
+    },
+
+    "metadata": {
+      "type": "object",
+      "default": {},
+      "description": "Optional flat metadata. Values must be primitives or arrays of primitives.",
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "string" },
+          { "type": "number" },
+          { "type": "integer" },
+          { "type": "boolean" },
+          {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                { "type": "string" },
+                { "type": "number" },
+                { "type": "integer" },
+                { "type": "boolean" }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
