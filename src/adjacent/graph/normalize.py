@@ -6,15 +6,32 @@ from typing import Tuple
 
 
 def _norm_str(x: Any) -> str:
-    """Normalize a string by stripping whitespace."""
-    return str(x).strip()
+    """Normalize a string. Expects validation to have passed."""
+    if x is None:
+        raise ValueError("Cannot normalize None (validation should have caught this)")
+    if not isinstance(x, str):
+        # This should never happen if validation worked
+        raise TypeError(
+            f"Expected string after validation, got {type(x).__name__}: {x}. "
+            "This indicates a validation bug."
+        )
+    return x.strip()
 
 
 def _norm_str_opt(x: Any) -> Optional[str]:
-    """Normalize a string, return None if empty after stripping."""
+    """Normalize an optional string. Returns None if input is None or empty after stripping.
+
+    Raises TypeError if input is not None and not a string (validation should prevent this).
+    """
     if x is None:
         return None
-    s = str(x).strip()
+
+    if not isinstance(x, str):
+        raise TypeError(
+            f"Expected string or None after validation, got {type(x).__name__}: {x}"
+        )
+
+    s = x.strip()
     return s if s else None
 
 

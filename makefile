@@ -25,3 +25,19 @@ format:
 	@uv run ruff check --fix .
 	@echo "Running Ruff Formatter (Black style)..."
 	@uv run ruff format .
+
+
+# ----------------------------
+# Ingestion
+# ----------------------------
+ingest-demo:
+	@echo "Ingesting demo data into Neo4j..."
+	$(PYTHON) -m src.adjacent.graph.ingest \
+		--input data/demo/kaggle_ecommerce.json \
+		--schema schemas/product.json \
+		--neo4j-uri bolt://localhost:7688 \
+		--neo4j-user neo4j \
+		--neo4j-password adjacent123 \
+
+preprocess-demo:
+	@$(PYTHON) scripts/preprocess_demo.py

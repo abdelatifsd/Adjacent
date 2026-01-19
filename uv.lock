@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 [[package]]
 name = "adjacent"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "check-jsonschema" },
     { name = "jsonschema" },

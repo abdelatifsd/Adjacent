@@ -57,27 +57,28 @@ CREATE CONSTRAINT product_id_unique IF NOT EXISTS
 FOR (p:Product) REQUIRE p.id IS UNIQUE;
 """
 
+
 def build_upsert_cypher(optional_fields: set[str]) -> str:
     """Build UPSERT Cypher dynamically from schema.
-    
+
     Required fields are always SET.
     Optional fields use FOREACH for conditional updates.
     embed_text (derived field) is always SET.
     """
-    
+
     # Get required fields dynamically (excluding 'id' which is in MERGE)
     required_fields = [f for f in RequiredConfig.FIELDS if f != "id"]
-    
+
     # Build SET clause: required fields + embed_text
     set_parts = [f"p.{field} = row.{field}" for field in required_fields]
     set_parts.append("p.embed_text = row.embed_text")  # Always include embed_text
-    
+
     cypher_parts = [
         "UNWIND $rows AS row",
         "MERGE (p:Product {id: row.id})",  # id is the unique constraint
         "SET " + ",\n    ".join(set_parts),
     ]
-    
+
     # Add FOREACH blocks for each optional field (sorted for determinism)
     for field in sorted(optional_fields):
         cypher_parts.append(
@@ -85,7 +86,7 @@ def build_upsert_cypher(optional_fields: set[str]) -> str:
             f"  SET p.{field} = row.{field}\n"
             f")"
         )
-    
+
     return "\n".join(cypher_parts)
 
 
@@ -100,14 +101,14 @@ def upsert_products(
     cfg: Neo4jConfig,
     products: List[Dict[str, Any]],
     optional_fields: set[str],
-    batch_size: int = 25
+    batch_size: int = 25,
 ) -> Tuple[int, int]:
     if not products:
         return (0, 0)
 
     driver = GraphDatabase.driver(cfg.uri, auth=(cfg.user, cfg.password))
     batch_count = 0
-    
+
     # Ensure keys exist for optional fields to simplify Cypher FOREACH checks
     def _with_optionals(row: Dict[str, Any]) -> Dict[str, Any]:
         out = dict[str, Any](row)
@@ -116,7 +117,7 @@ def upsert_products(
         return out
 
     rows = [_with_optionals(p) for p in products]
-    
+
     # Build Cypher dynamically
     upsert_cypher = build_upsert_cypher(optional_fields)
 
@@ -170,7 +171,7 @@ def main() -> None:
 
     # Load schema once for normalization
     schema = load_json(schema_path)
-    normalizer:ProductNormalizer = ProductNormalizer(schema)
+    normalizer: ProductNormalizer = ProductNormalizer(schema)
     optional_fields = normalizer.optional_fields
 
     cfg = Neo4jConfig(
@@ -183,7 +184,9 @@ def main() -> None:
         ensure_constraints(cfg)
 
     products = load_products(input_path, validator, normalizer, limit=args.limit)
-    n, batches = upsert_products(cfg, products, optional_fields, batch_size=args.batch_size)
+    n, batches = upsert_products(
+        cfg, products, optional_fields, batch_size=args.batch_size
+    )
 
     print(f"Ingested {n} products in {batches} batches into Neo4j ({cfg.uri}).")
     print("Input format was schema-enforced via:", schema_path)
