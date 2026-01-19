@@ -30,7 +30,7 @@ format:
 # ----------------------------
 # Ingestion
 # ----------------------------
-ingest-demo:
+ingest:
 	@echo "Ingesting demo data into Neo4j..."
 	$(PYTHON) -m src.adjacent.graph.ingest \
 		--input data/demo/kaggle_ecommerce.json \
@@ -38,6 +38,34 @@ ingest-demo:
 		--neo4j-uri bolt://localhost:7688 \
 		--neo4j-user neo4j \
 		--neo4j-password adjacent123 \
+		--limit 10
 
-preprocess-demo:
-	@$(PYTHON) scripts/preprocess_demo.py
+# ----------------------------
+# Embedding Pipeline
+# ----------------------------
+
+embed:
+	@echo "Embedding ALL products in Neo4j..."
+	PYTHONPATH=src $(PYTHON) -m adjacent.graph.embed \
+		--provider huggingface \
+		--neo4j-uri bolt://localhost:7688 \
+		--neo4j-user neo4j \
+		--neo4j-password adjacent123
+
+embed-openai:
+	@echo "Embedding with OpenAI..."
+	@test -n "$(OPENAI_API_KEY)" || (echo "Error: OPENAI_API_KEY not set" && exit 1)
+	PYTHONPATH=src $(PYTHON) -m adjacent.graph.embed \
+		--provider openai \
+		--api-key $(OPENAI_API_KEY) \
+		--neo4j-uri bolt://localhost:7688 \
+		--neo4j-user neo4j \
+		--neo4j-password adjacent123
+
+# ----------------------------
+# Complete Pipeline
+# ----------------------------
+pipeline:
+	@echo "Running complete pipeline: preprocess → ingest → embed"
+	@$(MAKE) ingest
+	@$(MAKE) embed

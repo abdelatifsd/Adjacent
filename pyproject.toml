@@ -9,8 +9,10 @@ dependencies = [
     "jsonschema>=4.26.0",
     "neo4j>=5.27.0,<6.0.0",
     "networkx>=3.6.1",
+    "openai>=2.15.0",
     "pydantic>=2.12.5",
     "rich>=14.2.0",
+    "sentence-transformers>=5.2.0",
     "tqdm>=4.67.1",
 ]
 

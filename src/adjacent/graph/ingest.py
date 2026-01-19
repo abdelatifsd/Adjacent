@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Tuple, List
@@ -12,6 +13,8 @@ from adjacent.graph.validate import build_product_validator, validate_product_re
 from adjacent.graph.normalize import ProductNormalizer, RequiredConfig
 from commons.utils import load_json
 from jsonschema import Draft202012Validator
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -40,12 +43,14 @@ def load_products(
     normalizer: ProductNormalizer,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
+    logger.info("Loading products from %s", input_path)
     products: list[dict[str, Any]] = []
     for lineno, rec in iter_records(input_path):
         validate_product_record(validator, rec, lineno, input_path)
         products.append(normalizer.normalize(rec))
         if limit is not None and len(products) >= limit:
             break
+    logger.info("Loaded %d products", len(products))
     return products
 
 
@@ -91,10 +96,12 @@ def build_upsert_cypher(optional_fields: set[str]) -> str:
 
 
 def ensure_constraints(cfg: Neo4jConfig) -> None:
+    logger.info("Creating Neo4j constraints...")
     driver = GraphDatabase.driver(cfg.uri, auth=(cfg.user, cfg.password))
     with driver:
         with driver.session() as session:
             session.run(CONSTRAINT_CYPHER)
+    logger.info("Constraints created")
 
 
 def upsert_products(
@@ -104,8 +111,10 @@ def upsert_products(
     batch_size: int = 25,
 ) -> Tuple[int, int]:
     if not products:
+        logger.info("No products to upsert")
         return (0, 0)
 
+    logger.info("Upserting %d products to Neo4j (%s)", len(products), cfg.uri)
     driver = GraphDatabase.driver(cfg.uri, auth=(cfg.user, cfg.password))
     batch_count = 0
 
@@ -128,6 +137,7 @@ def upsert_products(
                 session.run(upsert_cypher, rows=batch)
                 batch_count += 1
 
+    logger.info("Upserted %d products in %d batches", len(products), batch_count)
     return (len(products), batch_count)
 
 
@@ -160,6 +170,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    
     args = parse_args()
 
     input_path = Path(args.input)
@@ -167,6 +179,7 @@ def main() -> None:
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
     schema_path = Path(args.schema)
+    logger.info("Loading schema from %s", schema_path)
     validator = build_product_validator(schema_path)
 
     # Load schema once for normalization
@@ -188,8 +201,8 @@ def main() -> None:
         cfg, products, optional_fields, batch_size=args.batch_size
     )
 
-    print(f"Ingested {n} products in {batches} batches into Neo4j ({cfg.uri}).")
-    print("Input format was schema-enforced via:", schema_path)
+    logger.info("✓ Ingested %d products in %d batches into Neo4j (%s)", n, batches, cfg.uri)
+    logger.info("Schema: %s", schema_path)
 
 
 if __name__ == "__main__":
