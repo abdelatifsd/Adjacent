@@ -63,6 +63,29 @@ embed-openai:
 		--neo4j-password adjacent123
 
 # ----------------------------
+# Recommender
+# ----------------------------
+# Example: make recommend PRODUCT_ID=some_product_id
+recommend:
+	@test -n "$(PRODUCT_ID)" || (echo "Error: PRODUCT_ID not set. Usage: make recommend PRODUCT_ID=your_id" && exit 1)
+	PYTHONPATH=src $(PYTHON) -m adjacent.recommender $(PRODUCT_ID) \
+		--neo4j-uri bolt://localhost:7688 \
+		--neo4j-user neo4j \
+		--neo4j-password adjacent123 \
+		--embedding-provider huggingface
+
+# With LLM inference (requires OPENAI_API_KEY)
+recommend-llm:
+	@test -n "$(PRODUCT_ID)" || (echo "Error: PRODUCT_ID not set. Usage: make recommend-llm PRODUCT_ID=your_id" && exit 1)
+	@test -n "$(OPENAI_API_KEY)" || (echo "Error: OPENAI_API_KEY not set" && exit 1)
+	PYTHONPATH=src $(PYTHON) -m adjacent.recommender $(PRODUCT_ID) \
+		--neo4j-uri bolt://localhost:7688 \
+		--neo4j-user neo4j \
+		--neo4j-password adjacent123 \
+		--embedding-provider huggingface \
+		--openai-api-key $(OPENAI_API_KEY)
+
+# ----------------------------
 # Complete Pipeline
 # ----------------------------
 pipeline:

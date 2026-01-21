@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjacent.dev/schemas/llm_product_view/v1",
+  "title": "LLMProductView",
+  "description": "Projection of a Product for LLM edge inference. Contains only fields relevant for relationship discovery. Excludes embeddings, internal metadata, and storage-only fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "description"],
+
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Product identifier. Used by LLM to reference products in edge patches."
+    },
+
+    "title": {
+      "type": ["string", "null"],
+      "description": "Human-readable product title. Null if not available."
+    },
+
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Primary semantic text for relationship inference."
+    },
+
+    "brand": {
+      "type": ["string", "null"],
+      "description": "Brand or manufacturer. Null if not available."
+    },
+
+    "category": {
+      "type": ["string", "null"],
+      "description": "Primary category label. Null if not available."
+    },
+
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Keyword tags for additional context."
+    },
+
+    "price": {
+      "type": ["number", "null"],
+      "description": "Price value. Null if not available."
+    },
+
+    "currency": {
+      "type": ["string", "null"],
+      "description": "Currency code. Null if not available."
+    }
+  }
+}

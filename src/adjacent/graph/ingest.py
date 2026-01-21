@@ -16,13 +16,11 @@ from jsonschema import Draft202012Validator
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass(frozen=True)
 class Neo4jConfig:
     uri: str
     user: str
     password: str
-
 
 # ----------------------------
 # Expected input format
