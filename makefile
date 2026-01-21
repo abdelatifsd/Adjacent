@@ -86,9 +86,64 @@ recommend-llm:
 		--openai-api-key $(OPENAI_API_KEY)
 
 # ----------------------------
+# Async Infrastructure (Redis + RQ)
+# ----------------------------
+redis-start:
+	@echo "Starting Redis for async inference queue"
+	@docker run --name adjacent-redis -p 6379:6379 -d redis:7-alpine || docker start adjacent-redis
+
+redis-stop:
+	@docker stop adjacent-redis || true
+
+# Start the RQ worker (processes inference tasks)
+worker:
+	@echo "Starting RQ worker for inference tasks..."
+	PYTHONPATH=src uv run rq worker adjacent_inference \
+		--url redis://localhost:6379/0 \
+		--with-scheduler
+
+# Monitor the queue (requires rq-dashboard: pip install rq-dashboard)
+worker-dashboard:
+	@echo "Starting RQ dashboard at http://localhost:9181"
+	uv run rq-dashboard --redis-url redis://localhost:6379/0
+
+# Check queue status
+queue-status:
+	PYTHONPATH=src uv run rq info --url redis://localhost:6379/0
+
+# ----------------------------
+# Async Query (fast path + background inference)
+# ----------------------------
+# Example: make query-async PRODUCT_ID=some_product_id
+query-async:
+	@test -n "$(PRODUCT_ID)" || (echo "Error: PRODUCT_ID not set. Usage: make query-async PRODUCT_ID=your_id" && exit 1)
+	PYTHONPATH=src $(PYTHON) -c "\
+from adjacent.async_inference import QueryService, AsyncConfig; \
+import os; \
+config = AsyncConfig(openai_api_key=os.environ.get('OPENAI_API_KEY')); \
+with QueryService(config) as svc: \
+    result = svc.query('$(PRODUCT_ID)'); \
+    print('Anchor:', result.anchor_id); \
+    print('From graph:', result.from_graph); \
+    print('From vector:', result.from_vector); \
+    print('Inference:', result.inference_status, result.job_id or ''); \
+    print('Recommendations:'); \
+    for r in result.recommendations: \
+        print(f'  - {r.product_id} ({r.source}, conf={r.confidence})')"
+
+# ----------------------------
 # Complete Pipeline
 # ----------------------------
 pipeline:
 	@echo "Running complete pipeline: preprocess → ingest → embed"
 	@$(MAKE) ingest
 	@$(MAKE) embed
+
+pipeline-async:
+	@echo "Running async pipeline: neo4j + redis + ingest + embed"
+	@$(MAKE) neo4j-start
+	@$(MAKE) redis-start
+	@sleep 5
+	@$(MAKE) ingest
+	@$(MAKE) embed
+	@echo "Start worker with: make worker"

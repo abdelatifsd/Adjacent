@@ -33,3 +33,8 @@ Thumbs.db
 data/generated/
 data/raw/
 *.log
+
+# Environment (secrets)
+.env
+.env.local
+.env.*.local

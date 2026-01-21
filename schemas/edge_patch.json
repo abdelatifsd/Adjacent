@@ -1,59 +1,32 @@
 {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://adjacent.dev/schemas/edge_patch/v1",
-    "title": "RecommendationEdgePatch",
-    "description": "LLM-proposed edge intent for cold-start recommendations. This is a write-intent patch only. Deterministic and stateful fields (edge_id, anchors_seen, confidence, status, timestamps) are owned by the system and MUST NOT appear here.",
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["edge_type", "from_id", "to_id"],
-  
-    "properties": {
-      "edge_type": {
-        "type": "string",
-        "enum": ["SIMILAR_TO", "COMPLEMENTS", "SUBSTITUTE_FOR", "OFTEN_USED_WITH"],
-        "description": "Canonical relationship type. In v1, all relationship types are symmetric."
-      },
-  
-      "from_id": {
-        "type": "string",
-        "description": "Product ID endpoint A. The model should output canonical ordering (from_id <= to_id), but the system will enforce canonicalization."
-      },
-  
-      "to_id": {
-        "type": "string",
-        "description": "Product ID endpoint B. The model should output canonical ordering (from_id <= to_id), but the system will enforce canonicalization."
-      },
-  
-      "notes": {
-        "type": "string",
-        "maxLength": 240,
-        "description": "Optional short rationale (one phrase or sentence). No long explanations."
-      },
-  
-      "edge_props": {
-        "type": "object",
-        "default": {},
-        "description": "Edge-type-specific properties. Must be flat: primitives or arrays of primitives.",
-        "additionalProperties": {
-          "anyOf": [
-            { "type": "string" },
-            { "type": "number" },
-            { "type": "integer" },
-            { "type": "boolean" },
-            {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  { "type": "string" },
-                  { "type": "number" },
-                  { "type": "integer" },
-                  { "type": "boolean" }
-                ]
-              }
-            }
-          ]
-        }
-      }
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjacent.dev/schemas/edge_patch/v1",
+  "title": "RecommendationEdgePatch",
+  "description": "LLM-proposed edge intent for cold-start recommendations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["edge_type", "from_id", "to_id", "notes"],
+
+  "properties": {
+    "edge_type": {
+      "type": "string",
+      "enum": ["SIMILAR_TO", "COMPLEMENTS", "SUBSTITUTE_FOR", "OFTEN_USED_WITH"],
+      "description": "Canonical relationship type. In v1, all relationship types are symmetric."
+    },
+
+    "from_id": {
+      "type": "string",
+      "description": "Product ID endpoint A. Use canonical ordering: from_id <= to_id."
+    },
+
+    "to_id": {
+      "type": "string",
+      "description": "Product ID endpoint B. Use canonical ordering: from_id <= to_id."
+    },
+
+    "notes": {
+      "type": ["string", "null"],
+      "description": "Short rationale for this edge. Null if self-evident."
     }
   }
-  
+}
