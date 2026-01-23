@@ -110,28 +110,25 @@ Products are embedded in batches. Vectors are stored directly on Product nodes, 
 When a product `X` is queried:
 
 ```
-1. Embed X
-2. Retrieve top-K semantically similar candidates
-3. Filter candidates based on endpoint reinforcement rules:
+1. Fetch existing graph neighbors of X (Neo4j edges)
+2. If needed, retrieve vector-similar candidates to fill the response to top-K
+3. Decide which *vector* candidates should be sent for async inference (endpoint reinforcement gating):
    - Not connected → Include
-   - Connected with low anchors/confidence → Include (endpoint reinforcement)
-   - Connected with high anchors/confidence → Filter out
-4. Send (anchor, candidates) to the LLM
-5. LLM returns edge patches for:
-   - Anchor↔candidate edges (X↔B, X↔C, etc.)
-   - Candidate↔candidate edges (B↔C, B↔D, etc.)
-6. For each edge patch:
-   - Check if edge already exists
-   - If exists: reinforce (add anchor to anchors_seen)
-   - If new: create with anchors_seen=[X]
-7. Edges are written to Neo4j
-8. Recommendations are returned
+   - Connected but still “early” → Include (endpoint reinforcement)
+   - Connected and “mature” → Filter out
+4. Enqueue an async inference job: infer_edges(anchor=X, candidate_ids=[...])
+5. Return recommendations immediately (graph + vector mix)
+6. Worker runs later:
+   - Calls LLM with (anchor=X, candidates=[...]) and receives edge patches for:
+     - Anchor↔candidate edges (X↔B, X↔C, etc.)
+     - Candidate↔candidate edges (B↔C, B↔D, etc.) among the provided candidates
+   - Materializes + upserts edges into Neo4j (reinforcement via anchors_seen)
 ```
 
 This loop repeats, gradually enriching the graph with both direct and transitive relationships.
 
 **Key Decision Point (Step 3):**
-- With endpoint reinforcement enabled: Edges can be reinforced by querying their endpoints, but only up to a threshold (default: 2 anchors, confidence < 0.70)
+- With endpoint reinforcement enabled: already-connected *vector* candidates can be re-sent for inference, but only up to a threshold (default: 2 anchors, confidence < 0.70)
 - After threshold: Only third-party anchors can reinforce the edge
 - This balances fast reinforcement for popular products with efficiency
 
@@ -343,7 +340,7 @@ The following are acknowledged limitations in v1, documented here to inform futu
 
 ### 1. Token Costs at Scale
 
-Each query triggers an LLM call with anchor + candidates. At high query volume, costs can escalate.
+Each query may enqueue an LLM call with anchor + candidates (when there are eligible vector candidates and an API key is configured). At high query volume, costs can escalate.
 
 **Future mitigations:**
 - Caching inference results for repeated queries
