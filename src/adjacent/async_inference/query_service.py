@@ -9,7 +9,7 @@ while enqueueing LLM inference for graph enrichment.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional
 
 from redis import Redis
@@ -254,8 +254,39 @@ class QueryService:
                 all_candidate_ids = [r.product_id for r in recommendations if r.source == "vector"]
                 
                 if all_candidate_ids:
-                    connected = edge_store.get_anchor_edges(product_id, all_candidate_ids)
-                    new_candidates = [cid for cid in all_candidate_ids if cid not in connected]
+                    if self.config.allow_endpoint_reinforcement:
+                        # Get edges with metadata to check reinforcement eligibility
+                        connected_edges = edge_store.get_anchor_edges_with_metadata(
+                            product_id, all_candidate_ids
+                        )
+                        
+                        new_candidates = []
+                        for cid in all_candidate_ids:
+                            if cid not in connected_edges:
+                                # Not connected, include for inference
+                                new_candidates.append(cid)
+                            else:
+                                # Connected - check if we should allow reinforcement
+                                edge_info = connected_edges[cid]
+                                anchor_count = int(edge_info.get("max_anchor_count", 0))
+                                confidence = float(edge_info.get("max_confidence_0_to_1", 0.0))
+                                
+                                # Allow reinforcement if:
+                                # 1. Anchor count is below threshold, AND
+                                # 2. Confidence is below max threshold
+                                if (anchor_count < self.config.endpoint_reinforcement_threshold and
+                                    confidence < self.config.endpoint_reinforcement_max_confidence):
+                                    new_candidates.append(cid)
+                                    logger.debug(
+                                        "Allowing endpoint reinforcement for %s-%s "
+                                        "(anchors=%d, confidence=%.2f)",
+                                        product_id, cid, anchor_count, confidence
+                                    )
+                                # else: filter out (too many anchors or high confidence)
+                    else:
+                        # Original behavior: filter all connected candidates
+                        connected = edge_store.get_anchor_edges(product_id, all_candidate_ids)
+                        new_candidates = [cid for cid in all_candidate_ids if cid not in connected]
                     
                     if new_candidates:
                         # Serialize config for RQ (dataclass → dict)

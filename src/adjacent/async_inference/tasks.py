@@ -165,7 +165,9 @@ def infer_edges(
     
     # Materialize and store
     edges_created = 0
+    # "reinforced" = anchors_seen actually gained the current anchor_id
     edges_reinforced = 0
+    edges_noop_existing = 0
     anchor_edges_created = 0
     candidate_edges_created = 0
     
@@ -176,6 +178,7 @@ def infer_edges(
             edge_id = compute_edge_id(edge_type, a, b)
             
             existing = edge_store.get_edge(edge_id)
+            existing_anchors = set((existing or {}).get("anchors_seen", []) or [])
             
             full_edge = materializer.materialize(
                 patch=patch,
@@ -186,7 +189,11 @@ def infer_edges(
             edge_store.upsert_edge(full_edge)
             
             if existing:
-                edges_reinforced += 1
+                # Only count as reinforced if this anchor is newly observed.
+                if anchor_id not in existing_anchors:
+                    edges_reinforced += 1
+                else:
+                    edges_noop_existing += 1
             else:
                 edges_created += 1
                 # Track edge type (anchor vs candidate-candidate)
@@ -207,6 +214,7 @@ def infer_edges(
         "anchor_edges_created": anchor_edges_created,
         "candidate_edges_created": candidate_edges_created,
         "edges_reinforced": edges_reinforced,
+        "edges_noop_existing": edges_noop_existing,
     }
 
 

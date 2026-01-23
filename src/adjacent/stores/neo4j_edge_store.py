@@ -93,6 +93,59 @@ class Neo4jEdgeStore:
         connected = record.get("connected_ids", [])
         return set(connected)
 
+    def get_anchor_edges_with_metadata(
+        self, anchor_id: str, candidate_ids: Iterable[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Return a dict mapping candidate_id -> edge metadata for edges between
+        anchor and candidates.
+        
+        Used for endpoint reinforcement: allows checking anchors_seen count
+        and confidence to decide whether to allow reinforcement.
+        
+        NOTE: Multiple semantic edge types can exist between the same product
+        pair. This method aggregates across *all* relationships between
+        (anchor_id, candidate_id) so the caller's gating logic is stable.
+
+        Returns:
+            Dict[str, Dict[str, Any]] where keys are candidate IDs and values
+            contain edge metadata:
+            - max_anchor_count: int max number of anchors_seen across edge types
+            - max_confidence_0_to_1: float max confidence across edge types
+        """
+        candidates: List[str] = list(candidate_ids)
+        if not candidates:
+            return {}
+        
+        cypher = f"""
+        MATCH (a:{self.config.product_label} {{id: $anchor_id}})
+        MATCH (a)-[r:{self.config.rel_type}]-(c:{self.config.product_label})
+        WHERE c.id IN $candidate_ids
+        RETURN
+            c.id AS candidate_id,
+            max(size(coalesce(r.anchors_seen, []))) AS max_anchor_count,
+            max(coalesce(r.confidence_0_to_1, 0.0)) AS max_confidence
+        """
+        
+        with self.driver.session() as session:
+            records = list(session.run(
+                cypher,
+                anchor_id=anchor_id,
+                candidate_ids=candidates,
+            ))
+        
+        result = {}
+        for rec in records:
+            candidate_id = rec["candidate_id"]
+            max_anchor_count = rec.get("max_anchor_count") or 0
+            max_confidence = rec.get("max_confidence") or 0.0
+            result[candidate_id] = {
+                "max_anchor_count": int(max_anchor_count),
+                "max_confidence_0_to_1": float(max_confidence),
+            }
+        
+        return result
+
     def upsert_edge(self, edge: Dict[str, Any]) -> None:
         """
         Upsert a fully materialized edge (schema edge.json) into Neo4j.
@@ -221,12 +274,18 @@ class Neo4jEdgeStore:
 
         where_clause = " AND ".join(where_parts)
 
+        # NOTE: multiple relationships can exist between the same (a,b) pair
+        # (one per semantic edge_type). We de-duplicate by candidate_id,
+        # selecting the "best" relationship by confidence + recency.
         cypher = f"""
         MATCH (a:{self.config.product_label} {{id: $anchor_id}})-[r:{self.config.rel_type}]-(b:{self.config.product_label})
         WHERE {where_clause}
-        RETURN b.id AS candidate_id, properties(r) AS props
-        ORDER BY r.confidence_0_to_1 DESC, r.last_reinforced_at DESC
+        WITH b.id AS candidate_id, properties(r) AS props
+        ORDER BY props.confidence_0_to_1 DESC, props.last_reinforced_at DESC
+        WITH candidate_id, collect(props)[0] AS props
+        ORDER BY props.confidence_0_to_1 DESC, props.last_reinforced_at DESC
         LIMIT $limit
+        RETURN candidate_id, props
         """
 
         with self.driver.session() as session:
