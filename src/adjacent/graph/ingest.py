@@ -118,7 +118,7 @@ def upsert_products(
 
     # Ensure keys exist for optional fields to simplify Cypher FOREACH checks
     def _with_optionals(row: Dict[str, Any]) -> Dict[str, Any]:
-        out = dict[str, Any](row)
+        out = {**row}
         for k in optional_fields:
             out.setdefault(k, None)
         return out

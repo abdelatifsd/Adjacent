@@ -8,7 +8,7 @@ You MUST follow these rules:
 - In v1, all edges are symmetric. You MUST store edges canonically:
   - Use from_id and to_id as product IDs from the input only.
   - Set (from_id, to_id) such that from_id <= to_id (lexicographic string order).
-- Only infer relationships between the anchor product and each candidate product (no candidate-candidate edges in v1).
+- Infer relationships between the anchor product and candidates, AND among candidates themselves.
 - Do NOT invent products, IDs, attributes, or relationships not supported by the provided product information.
 - Prefer precision over recall: if unsure, omit the edge.
 - Avoid redundant edges: for a given pair, choose the single best edge_type.

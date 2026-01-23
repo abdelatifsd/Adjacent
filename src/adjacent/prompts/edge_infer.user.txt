@@ -7,7 +7,7 @@ Candidate products (JSON array):
 {CANDIDATES_JSON}
 
 Constraints:
-- Only anchor↔candidate edges.
+- Anchor↔candidate edges AND candidate↔candidate edges are allowed.
 - Use only product IDs provided above.
 - Canonical ordering: from_id <= to_id.
 - Only include an edge if it is strongly justified by the text (title/description/category/tags/brand/price when present).

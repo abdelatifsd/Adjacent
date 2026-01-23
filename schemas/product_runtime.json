@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjacent.dev/schemas/product_runtime/v1",
+  "title": "ProductRuntimeProperties",
+  "description": "Runtime properties added to Product nodes after ingestion. These are set by the embedding pipeline, recommender, and async inference system. This schema documents the full Product node shape in Neo4j.",
+  "type": "object",
+
+  "properties": {
+    "_comment": {
+      "const": "Base properties from schemas/product.json are inherited. This schema documents additional runtime properties."
+    },
+
+    "embed_text": {
+      "type": "string",
+      "description": "Derived text field used for embedding. Set during ingestion by normalize.py. Currently contains description only, but may include title/category/tags in future versions."
+    },
+
+    "embedding": {
+      "type": "array",
+      "items": { "type": "number" },
+      "description": "Vector embedding of embed_text. Set by graph/embed.py."
+    },
+
+    "embedding_dim": {
+      "type": "integer",
+      "description": "Dimension of the embedding vector. Set by graph/embed.py."
+    },
+
+    "embedding_model": {
+      "type": "string",
+      "description": "Model identifier used to generate the embedding (e.g., 'sentence-transformers/all-MiniLM-L6-v2'). Set by graph/embed.py."
+    },
+
+    "embedding_updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when embedding was last updated. Set by graph/embed.py."
+    },
+
+    "last_inference_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when this product was last used as an anchor for LLM edge inference. Set by recommender.py and async_inference/tasks.py."
+    },
+
+    "inference_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of times this product has been used as an anchor for LLM edge inference. Set by recommender.py and async_inference/tasks.py."
+    }
+  }
+}

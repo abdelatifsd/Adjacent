@@ -166,6 +166,8 @@ def infer_edges(
     # Materialize and store
     edges_created = 0
     edges_reinforced = 0
+    anchor_edges_created = 0
+    candidate_edges_created = 0
     
     with Neo4jEdgeStore(edge_store_config) as edge_store:
         for patch in patches:
@@ -187,6 +189,11 @@ def infer_edges(
                 edges_reinforced += 1
             else:
                 edges_created += 1
+                # Track edge type (anchor vs candidate-candidate)
+                if a == anchor_id or b == anchor_id:
+                    anchor_edges_created += 1
+                else:
+                    candidate_edges_created += 1
     
     # Update anchor's inference timestamp
     _mark_anchor_inferred(config, anchor_id)
@@ -197,6 +204,8 @@ def infer_edges(
     return {
         "anchor_id": anchor_id,
         "edges_created": edges_created,
+        "anchor_edges_created": anchor_edges_created,
+        "candidate_edges_created": candidate_edges_created,
         "edges_reinforced": edges_reinforced,
     }
 

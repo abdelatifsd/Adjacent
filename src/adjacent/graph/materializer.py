@@ -28,8 +28,9 @@ def confidence_from_anchors(
     cap: float = 0.95,
 ) -> float:
     """
-    Capped exponential-ish growth.
+    Capped exponential growth.
     n = number of distinct anchors_seen
+
     """
     if n <= 0:
         return 0.0

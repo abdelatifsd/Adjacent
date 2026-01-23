@@ -112,15 +112,20 @@ When a product `X` is queried:
 ```
 1. Embed X
 2. Retrieve top-K semantically similar candidates
-3. Filter out candidates already connected to X in the graph
-4. Send remaining (anchor, candidates) to the LLM
-5. LLM returns edge patches (partial edge info)
-6. Edge patches are materialized deterministically
+3. Filter out candidates already connected to X (anchor↔candidate filtering only)
+4. Send (anchor, candidates) to the LLM
+5. LLM returns edge patches for:
+   - Anchor↔candidate edges (X↔B, X↔C, etc.)
+   - Candidate↔candidate edges (B↔C, B↔D, etc.)
+6. For each edge patch:
+   - Check if edge already exists
+   - If exists: reinforce (add anchor to anchors_seen)
+   - If new: create with anchors_seen=[X]
 7. Edges are written to Neo4j
 8. Recommendations are returned
 ```
 
-This loop repeats, gradually enriching the graph.
+This loop repeats, gradually enriching the graph with both direct and transitive relationships.
 
 ---
 
@@ -145,42 +150,99 @@ All recommendation edges are:
 
 > **Note:** No behavioral semantics are assumed. These are world-knowledge relationships, not user-interaction claims.
 
+### Edge Type Uniqueness
+
+**Important design decision:** Multiple edge types can exist between the same product pair.
+
+The `edge_id` is computed as `hash(edge_type + from_id + to_id)`, meaning:
+- `B↔C (COMPLEMENTS)` and `B↔C (SUBSTITUTE_FOR)` are **separate edges**
+- Each has its own `anchors_seen` and confidence score
+- Both can coexist in the graph
+
+**Why allow this?**
+- A product pair may genuinely have multiple relationship types
+- Example: A keyboard COMPLEMENTS a mouse AND is OFTEN_USED_WITH a mouse
+- The LLM prompt instructs "choose the single best edge_type" per call, but different anchor contexts may yield different judgments
+
+**Implication:** When querying recommendations, you may see the same product pair with different edge types. The one with higher confidence (more anchors) is typically more reliable.
+
 ---
 
 ## Anchors & Confidence
 
 An edge becomes trustworthy not because the LLM said so once, but because **it keeps reappearing under different anchors**.
 
-**Example:**
+### How Reinforcement Works
+
+When the LLM infers an edge, the system checks if that edge already exists:
+
+| Scenario | Action |
+|----------|--------|
+| Edge is new | Create with `anchors_seen=[current_anchor]`, confidence=0.55 |
+| Edge exists, anchor is new | Append anchor to `anchors_seen`, recalculate confidence |
+| Edge exists, anchor already seen | No change (same anchor can't reinforce twice) |
+
+**Example: Candidate↔Candidate Reinforcement**
 
 ```
-Query A → edge (B, C) inferred
-Query F → edge (B, C) inferred again
-Query Q → edge (B, C) inferred again
+Query anchor A → candidates [B, C, D]
+  └── LLM infers B↔C (COMPLEMENTS)
+  └── Edge created: B↔C, anchors_seen=[A], confidence=0.55, status=PROPOSED
+
+Query anchor E → candidates [B, C, F]
+  └── LLM re-infers B↔C (COMPLEMENTS)
+  └── Edge exists! anchors_seen=[A, E], confidence=0.63, status=PROPOSED
+
+Query anchor G → candidates [B, C, X]
+  └── LLM re-infers B↔C (COMPLEMENTS)
+  └── Edge exists! anchors_seen=[A, E, G], confidence=0.70, status=ACTIVE
 ```
 
-Each distinct anchor reinforces the edge.
+**Key insight:** The edge B↔C was discovered from three different anchor contexts. None of these anchors are B or C themselves — they're independent queries whose candidate sets happened to include both B and C.
 
 **Confidence grows via a capped exponential heuristic:**
-- Fast initial growth
-- Diminishing returns
-- Hard upper bound (no false certainty)
+- Base confidence: 0.55 (single anchor)
+- Growth rate: 0.15 per additional anchor
+- Hard cap: 0.95 (no false certainty)
+- ACTIVE threshold: 0.70 (typically ~3 distinct anchors)
 
 ---
 
-## Why Filter Existing Edges Before LLM Calls?
+## Filtering & Reinforcement Logic
 
-Before asking the LLM, we remove candidates already connected to the anchor.
+### Anchor↔Candidate Edges
 
-**Why?**
-- Avoid re-inferring settled edges
-- Prevent contradictions
+Before asking the LLM, we **filter out candidates already connected to the anchor**.
+
+**Why filter?**
+- Avoid re-inferring settled anchor↔candidate edges
+- Prevent contradictions (LLM might change its mind)
 - Reduce token usage
-- Ensure the graph grows monotonically
+- Reinforcement should come from **reciprocal discovery** (query B, find A as candidate)
 
-**Important nuance:**
-- This does not prevent candidates from being connected to each other later
-- Those relationships will be inferred when they become anchors themselves
+**Example:**
+```
+Query A → creates A↔B (anchors_seen=[A])
+Query A again → B is filtered (already connected)
+Query B → A appears as candidate → LLM re-infers A↔B → reinforced (anchors_seen=[A, B])
+```
+
+### Candidate↔Candidate Edges
+
+We **do NOT filter** candidate↔candidate edges before the LLM call.
+
+**Why no filtering?**
+- Candidate↔candidate edges are discovered indirectly (via anchor queries)
+- Re-inference from different anchors IS the reinforcement mechanism
+- The current anchor is recorded in `anchors_seen` regardless
+
+**Example:**
+```
+Query A → candidates [B, C] → LLM infers B↔C → created (anchors_seen=[A])
+Query E → candidates [B, C] → LLM re-infers B↔C → reinforced (anchors_seen=[A, E])
+```
+
+The edge B↔C is strengthened because two independent anchor queries both led to its discovery.
 
 ---
 
