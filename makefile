@@ -37,8 +37,7 @@ ingest:
 		--schema schemas/product.json \
 		--neo4j-uri bolt://localhost:7688 \
 		--neo4j-user neo4j \
-		--neo4j-password adjacent123 \
-		--limit 10
+		--neo4j-password adjacent123 
 
 # ----------------------------
 # Embedding Pipeline
@@ -63,27 +62,21 @@ embed-openai:
 		--neo4j-password adjacent123
 
 # ----------------------------
-# Recommender
+# FastAPI Server
 # ----------------------------
-# Example: make recommend PRODUCT_ID=some_product_id
-recommend:
-	@test -n "$(PRODUCT_ID)" || (echo "Error: PRODUCT_ID not set. Usage: make recommend PRODUCT_ID=your_id" && exit 1)
-	PYTHONPATH=src $(PYTHON) -m adjacent.recommender $(PRODUCT_ID) \
-		--neo4j-uri bolt://localhost:7688 \
-		--neo4j-user neo4j \
-		--neo4j-password adjacent123 \
-		--embedding-provider huggingface
-
-# With LLM inference (requires OPENAI_API_KEY)
-recommend-llm:
-	@test -n "$(PRODUCT_ID)" || (echo "Error: PRODUCT_ID not set. Usage: make recommend-llm PRODUCT_ID=your_id" && exit 1)
-	@test -n "$(OPENAI_API_KEY)" || (echo "Error: OPENAI_API_KEY not set" && exit 1)
-	PYTHONPATH=src $(PYTHON) -m adjacent.recommender $(PRODUCT_ID) \
-		--neo4j-uri bolt://localhost:7688 \
-		--neo4j-user neo4j \
-		--neo4j-password adjacent123 \
-		--embedding-provider huggingface \
-		--openai-api-key $(OPENAI_API_KEY)
+api-start:
+	@echo "Starting Adjacent API server at http://localhost:8000"
+	@echo "Interactive docs available at:"
+	@echo "  - Swagger UI: http://localhost:8000/docs"
+	@echo "  - ReDoc:      http://localhost:8000/redoc"
+	@if [ -f .env ]; then \
+		echo "Loading environment from .env file..."; \
+		export $$(cat .env | grep -v '^#' | xargs) && \
+		PYTHONPATH=src uv run uvicorn adjacent.api.app:app --reload --host 0.0.0.0 --port 8000; \
+	else \
+		echo "Warning: .env file not found, using defaults"; \
+		PYTHONPATH=src uv run uvicorn adjacent.api.app:app --reload --host 0.0.0.0 --port 8000; \
+	fi
 
 # ----------------------------
 # Async Infrastructure (Redis + RQ)
@@ -98,38 +91,23 @@ redis-stop:
 # Start the RQ worker (processes inference tasks)
 worker:
 	@echo "Starting RQ worker for inference tasks..."
-	PYTHONPATH=src uv run rq worker adjacent_inference \
-		--url redis://localhost:6379/0 \
-		--with-scheduler
+	@if [ -f .env ]; then \
+		echo "Loading environment from .env file..."; \
+		export $$(cat .env | grep -v '^#' | xargs) && \
+		PYTHONPATH=src uv run rq worker adjacent_inference \
+			--url redis://localhost:6379/0 \
+			--with-scheduler; \
+	else \
+		echo "Warning: .env file not found"; \
+		PYTHONPATH=src uv run rq worker adjacent_inference \
+			--url redis://localhost:6379/0 \
+			--with-scheduler; \
+	fi
 
 # Monitor the queue (requires rq-dashboard: pip install rq-dashboard)
 worker-dashboard:
 	@echo "Starting RQ dashboard at http://localhost:9181"
 	uv run rq-dashboard --redis-url redis://localhost:6379/0
-
-# Check queue status
-queue-status:
-	PYTHONPATH=src uv run rq info --url redis://localhost:6379/0
-
-# ----------------------------
-# Async Query (fast path + background inference)
-# ----------------------------
-# Example: make query-async PRODUCT_ID=some_product_id
-query-async:
-	@test -n "$(PRODUCT_ID)" || (echo "Error: PRODUCT_ID not set. Usage: make query-async PRODUCT_ID=your_id" && exit 1)
-	PYTHONPATH=src $(PYTHON) -c "\
-from adjacent.async_inference import QueryService, AsyncConfig; \
-import os; \
-config = AsyncConfig(openai_api_key=os.environ.get('OPENAI_API_KEY')); \
-with QueryService(config) as svc: \
-    result = svc.query('$(PRODUCT_ID)'); \
-    print('Anchor:', result.anchor_id); \
-    print('From graph:', result.from_graph); \
-    print('From vector:', result.from_vector); \
-    print('Inference:', result.inference_status, result.job_id or ''); \
-    print('Recommendations:'); \
-    for r in result.recommendations: \
-        print(f'  - {r.product_id} ({r.source}, conf={r.confidence})')"
 
 # ----------------------------
 # Complete Pipeline
@@ -147,3 +125,18 @@ pipeline-async:
 	@$(MAKE) ingest
 	@$(MAKE) embed
 	@echo "Start worker with: make worker"
+
+# ----------------------------
+# Quick Start (for testing)
+# ----------------------------
+dev:
+	@echo "Starting development environment..."
+	@echo "This will start Neo4j and Redis if not already running"
+	@$(MAKE) neo4j-start || docker start adjacent-neo4j || true
+	@$(MAKE) redis-start || true
+	@sleep 3
+	@echo ""
+	@echo "Services ready! Now starting API server..."
+	@echo "Run 'make worker' in another terminal to enable async inference"
+	@echo ""
+	@$(MAKE) api-start

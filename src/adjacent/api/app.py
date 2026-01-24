@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -17,6 +18,13 @@ from fastapi import FastAPI
 from adjacent.async_inference.config import AsyncConfig
 from adjacent.async_inference.query_service import QueryService
 from adjacent.api.routes import router
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
 
 logger = logging.getLogger(__name__)
 
