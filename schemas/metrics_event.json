@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjacent.dev/schemas/metrics_event/v1",
+  "title": "MetricsEvent",
+  "description": "JSONL-formatted performance instrumentation event for tracking latency breakdown and counters across query and async inference paths. Events are emitted by commons.metrics and consumed by log analysis pipelines.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "timestamp", "event_type"],
+
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Metrics event schema version. Current: '1.0'",
+      "const": "1.0"
+    },
+
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (UTC) when this event was emitted."
+    },
+
+    "event_type": {
+      "type": "string",
+      "enum": ["span", "counter"],
+      "description": "Type of metrics event. 'span' measures duration of an operation; 'counter' records a point-in-time metric."
+    },
+
+    "operation": {
+      "type": "string",
+      "description": "High-level pipeline operation name (e.g., 'query', 'infer_edges', 'ingest', 'embed'). Used to group related spans and counters.",
+      "examples": ["query", "infer_edges", "ingest", "embed"]
+    },
+
+    "trace_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Correlation ID for tracking a request across multiple operations and spans. Generated via generate_trace_id()."
+    },
+
+    "span": {
+      "type": "string",
+      "description": "Span name identifying a specific timed operation (e.g., 'fetch_anchor', 'llm_call', 'vector_search'). Required when event_type is 'span'.",
+      "examples": ["fetch_anchor", "graph_neighbors", "vector_search", "llm_call", "materialize_and_upsert"]
+    },
+
+    "duration_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Duration of the span in milliseconds (rounded to 2 decimal places). Required when event_type is 'span'."
+    },
+
+    "status": {
+      "type": "string",
+      "enum": ["ok", "error"],
+      "description": "Span completion status. 'ok' indicates success; 'error' indicates an exception occurred. Required when event_type is 'span'."
+    },
+
+    "error_type": {
+      "type": "string",
+      "description": "Exception class name if status is 'error' (e.g., 'ValueError', 'ConnectionError'). Optional, present only when an error occurred."
+    },
+
+    "error_message": {
+      "type": "string",
+      "description": "Exception message or repr if status is 'error'. May be truncated for safety. Optional, present only when an error occurred."
+    },
+
+    "counter_name": {
+      "type": "string",
+      "description": "Counter metric name (e.g., 'top_k', 'skip_inference', 'cache_hits'). Required when event_type is 'counter'.",
+      "examples": ["top_k", "from_graph", "from_vector", "candidates_enqueued", "skip_inference"]
+    },
+
+    "value": {
+      "type": "number",
+      "description": "Counter value (int or float). Required when event_type is 'counter'."
+    },
+
+    "attrs": {
+      "type": "object",
+      "description": "Flat key-value attributes for this event. Should only contain IDs (strings), small integers, booleans, or short strings. MUST NOT contain full text, embeddings, PII, or large payloads.",
+      "additionalProperties": true,
+      "examples": [
+        {"product_id": "abc123", "top_k": 10},
+        {"anchor_id": "prod_456", "candidate_count": 25}
+      ]
+    },
+
+    "counts": {
+      "type": "object",
+      "description": "Counter values accumulated during a span (e.g., 'from_graph': 5, 'from_vector': 3). Each value is an int or float. Optional, present only for span events.",
+      "additionalProperties": {
+        "type": "number"
+      },
+      "examples": [
+        {"from_graph": 5, "from_vector": 3, "candidates_enqueued": 8},
+        {"edges_created": 12, "edges_reinforced": 4}
+      ]
+    }
+  },
+
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "span"
+          }
+        }
+      },
+      "then": {
+        "required": ["span", "duration_ms", "status"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "counter"
+          }
+        }
+      },
+      "then": {
+        "required": ["counter_name", "value"]
+      }
+    }
+  ],
+
+  "examples": [
+    {
+      "schema_version": "1.0",
+      "timestamp": "2026-01-24T12:34:56.789Z",
+      "event_type": "span",
+      "operation": "query",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "span": "fetch_anchor",
+      "duration_ms": 12.45,
+      "status": "ok",
+      "attrs": {
+        "product_id": "prod_abc123"
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "timestamp": "2026-01-24T12:34:56.801Z",
+      "event_type": "span",
+      "operation": "query",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "span": "graph_neighbors",
+      "duration_ms": 25.67,
+      "status": "ok",
+      "counts": {
+        "from_graph": 5
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "timestamp": "2026-01-24T12:34:56.850Z",
+      "event_type": "span",
+      "operation": "query",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "span": "vector_search",
+      "duration_ms": 45.12,
+      "status": "ok",
+      "counts": {
+        "from_vector": 3
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "timestamp": "2026-01-24T12:34:56.900Z",
+      "event_type": "counter",
+      "operation": "query",
+      "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+      "counter_name": "top_k",
+      "value": 10
+    },
+    {
+      "schema_version": "1.0",
+      "timestamp": "2026-01-24T12:35:10.123Z",
+      "event_type": "span",
+      "operation": "infer_edges",
+      "trace_id": "660e8400-e29b-41d4-a716-446655440111",
+      "span": "llm_call",
+      "duration_ms": 1250.75,
+      "status": "ok",
+      "attrs": {
+        "anchor_id": "prod_xyz789"
+      },
+      "counts": {
+        "patches_count": 15
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "timestamp": "2026-01-24T12:35:11.500Z",
+      "event_type": "span",
+      "operation": "infer_edges",
+      "trace_id": "660e8400-e29b-41d4-a716-446655440111",
+      "span": "materialize_and_upsert",
+      "duration_ms": 89.23,
+      "status": "ok",
+      "counts": {
+        "edges_created": 12,
+        "edges_reinforced": 3
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "timestamp": "2026-01-24T12:36:00.000Z",
+      "event_type": "span",
+      "operation": "query",
+      "trace_id": "770e8400-e29b-41d4-a716-446655440222",
+      "span": "fetch_anchor",
+      "duration_ms": 15.00,
+      "status": "error",
+      "error_type": "ValueError",
+      "error_message": "Product not found: invalid_id",
+      "attrs": {
+        "product_id": "invalid_id"
+      }
+    }
+  ]
+}

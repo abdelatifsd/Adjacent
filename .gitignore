@@ -34,6 +34,13 @@ data/generated/
 data/raw/
 *.log
 
+# Metrics and logs
+logs/*
+!logs/.gitkeep
+*.jsonl
+metrics*.jsonl
+debug*.log
+
 # Environment (secrets)
 .env
 .env.local

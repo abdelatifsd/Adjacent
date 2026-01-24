@@ -20,6 +20,7 @@ from adjacent.stores import Neo4jVectorStore
 from adjacent.stores.neo4j_edge_store import Neo4jEdgeStore, Neo4jEdgeStoreConfig
 from adjacent.async_inference.config import AsyncConfig
 from adjacent.db import Neo4jContext
+from commons.metrics import span, emit_counter, generate_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -159,163 +160,186 @@ class QueryService:
     ) -> QueryResult:
         """
         Get recommendations with guaranteed low latency.
-        
+
         1. Query existing graph edges
         2. If needed, supplement with vector similarity
         3. Enqueue inference for new candidates (async)
         4. Return merged results immediately
-        
+
         Args:
             product_id: Anchor product ID
             top_k: Number of recommendations to return
             skip_inference: If True, don't enqueue inference task
-            
+
         Returns:
             QueryResult with recommendations and metadata
         """
-        logger.info("Query for product: %s", product_id)
-        
-        # Fetch anchor
-        anchor = self._fetch_product(product_id)
-        if not anchor:
-            raise ValueError(f"Product not found: {product_id}")
-        
-        recommendations: List[Recommendation] = []
-        from_graph = 0
-        from_vector = 0
-        
-        # Step 1: Get existing graph edges
-        with Neo4jEdgeStore(self._edge_store_config, driver=self._neo4j_ctx.driver) as edge_store:
-            neighbors = edge_store.get_neighbors(
-                anchor_id=product_id,
-                limit=top_k,
-            )
-            
-            for n in neighbors:
-                recommendations.append(Recommendation(
-                    product_id=n["candidate_id"],
-                    edge_type=n.get("edge_type"),
-                    confidence=n.get("confidence_0_to_1"),
-                    source="graph",
-                ))
-            from_graph = len(recommendations)
-            
-            logger.info("Found %d graph edges for %s", from_graph, product_id)
-            
-            # Step 2: If we need more, use vector search
-            need_more = top_k - len(recommendations)
-            vector_candidates = []
-            
-            if need_more > 0:
-                embedding = self._get_embedding(anchor)
+        trace_id = generate_trace_id()
+        logger.info("Query for product: %s (trace_id=%s)", product_id, trace_id)
 
-                search_results = self._vector_store.similarity_search(
-                    query_embedding=embedding,
-                    top_k=top_k + from_graph + 1,  # Extra for filtering
-                    fields=["id"],  # Minimal projection - only need ID
-                )
-                
-                # Filter out anchor and already-recommended
-                existing_ids = {r.product_id for r in recommendations}
-                existing_ids.add(product_id)
-                
-                for result in search_results:
-                    pid = result["product"]["id"]
-                    if pid not in existing_ids and len(recommendations) < top_k:
+        with span("query_total", operation="query", trace_id=trace_id, logger=logger,
+                  product_id=product_id) as total_ctx:
+
+            # Fetch anchor
+            with span("fetch_anchor", operation="query", trace_id=trace_id, logger=logger):
+                anchor = self._fetch_product(product_id)
+                if not anchor:
+                    raise ValueError(f"Product not found: {product_id}")
+
+            recommendations: List[Recommendation] = []
+            from_graph = 0
+            from_vector = 0
+            candidates_enqueued = 0
+
+            # Step 1: Get existing graph edges
+            with Neo4jEdgeStore(self._edge_store_config, driver=self._neo4j_ctx.driver) as edge_store:
+                with span("graph_neighbors", operation="query", trace_id=trace_id, logger=logger) as ctx:
+                    neighbors = edge_store.get_neighbors(
+                        anchor_id=product_id,
+                        limit=top_k,
+                    )
+
+                    for n in neighbors:
                         recommendations.append(Recommendation(
-                            product_id=pid,
-                            edge_type=None,  # No edge yet
-                            confidence=None,
-                            source="vector",
-                            score=result.get("score"),
+                            product_id=n["candidate_id"],
+                            edge_type=n.get("edge_type"),
+                            confidence=n.get("confidence_0_to_1"),
+                            source="graph",
                         ))
-                        vector_candidates.append(pid)
-                        existing_ids.add(pid)
-                
-                from_vector = len(vector_candidates)
-                logger.info("Added %d vector results for %s", from_vector, product_id)
-            
-            # Step 3: Enqueue inference for new candidates
-            job_id = None
-            inference_status: Literal["complete", "enqueued", "skipped"] = "complete"
-            
-            # Get candidates not yet connected to anchor
-            if not skip_inference and self.config.openai_api_key:
-                # Check which vector candidates need inference
-                all_candidate_ids = [r.product_id for r in recommendations if r.source == "vector"]
-                
-                if all_candidate_ids:
-                    if self.config.allow_endpoint_reinforcement:
-                        # Get edges with metadata to check reinforcement eligibility
-                        connected_edges = edge_store.get_anchor_edges_with_metadata(
-                            product_id, all_candidate_ids
+                    from_graph = len(recommendations)
+                    ctx.set_count("from_graph", from_graph)
+
+                    logger.info("Found %d graph edges for %s", from_graph, product_id)
+
+                # Step 2: If we need more, use vector search
+                need_more = top_k - len(recommendations)
+                vector_candidates = []
+
+                if need_more > 0:
+                    with span("vector_search", operation="query", trace_id=trace_id, logger=logger) as ctx:
+                        embedding = self._get_embedding(anchor)
+
+                        search_results = self._vector_store.similarity_search(
+                            query_embedding=embedding,
+                            top_k=top_k + from_graph + 1,  # Extra for filtering
+                            fields=["id"],  # Minimal projection - only need ID
                         )
-                        
-                        new_candidates = []
-                        for cid in all_candidate_ids:
-                            if cid not in connected_edges:
-                                # Not connected, include for inference
-                                new_candidates.append(cid)
+
+                        # Filter out anchor and already-recommended
+                        existing_ids = {r.product_id for r in recommendations}
+                        existing_ids.add(product_id)
+
+                        for result in search_results:
+                            pid = result["product"]["id"]
+                            if pid not in existing_ids and len(recommendations) < top_k:
+                                recommendations.append(Recommendation(
+                                    product_id=pid,
+                                    edge_type=None,  # No edge yet
+                                    confidence=None,
+                                    source="vector",
+                                    score=result.get("score"),
+                                ))
+                                vector_candidates.append(pid)
+                                existing_ids.add(pid)
+
+                        from_vector = len(vector_candidates)
+                        ctx.set_count("from_vector", from_vector)
+                        logger.info("Added %d vector results for %s", from_vector, product_id)
+
+                # Step 3: Enqueue inference for new candidates
+                job_id = None
+                inference_status: Literal["complete", "enqueued", "skipped"] = "complete"
+
+                # Get candidates not yet connected to anchor
+                if not skip_inference and self.config.openai_api_key:
+                    with span("enqueue_inference", operation="query", trace_id=trace_id, logger=logger) as ctx:
+                        # Check which vector candidates need inference
+                        all_candidate_ids = [r.product_id for r in recommendations if r.source == "vector"]
+
+                        if all_candidate_ids:
+                            if self.config.allow_endpoint_reinforcement:
+                                # Get edges with metadata to check reinforcement eligibility
+                                connected_edges = edge_store.get_anchor_edges_with_metadata(
+                                    product_id, all_candidate_ids
+                                )
+
+                                new_candidates = []
+                                for cid in all_candidate_ids:
+                                    if cid not in connected_edges:
+                                        # Not connected, include for inference
+                                        new_candidates.append(cid)
+                                    else:
+                                        # Connected - check if we should allow reinforcement
+                                        edge_info = connected_edges[cid]
+                                        anchor_count = int(edge_info.get("max_anchor_count", 0))
+                                        confidence = float(edge_info.get("max_confidence_0_to_1", 0.0))
+
+                                        # Allow reinforcement if:
+                                        # 1. Anchor count is below threshold, AND
+                                        # 2. Confidence is below max threshold
+                                        if (anchor_count < self.config.endpoint_reinforcement_threshold and
+                                            confidence < self.config.endpoint_reinforcement_max_confidence):
+                                            new_candidates.append(cid)
+                                            logger.debug(
+                                                "Allowing endpoint reinforcement for %s-%s "
+                                                "(anchors=%d, confidence=%.2f)",
+                                                product_id, cid, anchor_count, confidence
+                                            )
+                                        # else: filter out (too many anchors or high confidence)
                             else:
-                                # Connected - check if we should allow reinforcement
-                                edge_info = connected_edges[cid]
-                                anchor_count = int(edge_info.get("max_anchor_count", 0))
-                                confidence = float(edge_info.get("max_confidence_0_to_1", 0.0))
-                                
-                                # Allow reinforcement if:
-                                # 1. Anchor count is below threshold, AND
-                                # 2. Confidence is below max threshold
-                                if (anchor_count < self.config.endpoint_reinforcement_threshold and
-                                    confidence < self.config.endpoint_reinforcement_max_confidence):
-                                    new_candidates.append(cid)
-                                    logger.debug(
-                                        "Allowing endpoint reinforcement for %s-%s "
-                                        "(anchors=%d, confidence=%.2f)",
-                                        product_id, cid, anchor_count, confidence
-                                    )
-                                # else: filter out (too many anchors or high confidence)
-                    else:
-                        # Original behavior: filter all connected candidates
-                        connected = edge_store.get_anchor_edges(product_id, all_candidate_ids)
-                        new_candidates = [cid for cid in all_candidate_ids if cid not in connected]
-                    
-                    if new_candidates:
-                        # Serialize config for RQ (dataclass → dict)
-                        config_dict = {
-                            "neo4j_uri": self.config.neo4j_uri,
-                            "neo4j_user": self.config.neo4j_user,
-                            "neo4j_password": self.config.neo4j_password,
-                            "openai_api_key": self.config.openai_api_key,
-                            "llm_model": self.config.llm_model,
-                            "system_prompt_path": str(self.config.system_prompt_path),
-                            "user_prompt_path": str(self.config.user_prompt_path),
-                            "edge_patch_schema_path": str(self.config.edge_patch_schema_path),
-                        }
-                        
-                        job = self._queue.enqueue(
-                            "adjacent.async_inference.tasks.infer_edges",
-                            anchor_id=product_id,
-                            candidate_ids=new_candidates,
-                            config_dict=config_dict,
-                            job_timeout=self.config.job_timeout,
-                        )
-                        job_id = job.id
-                        inference_status = "enqueued"
-                        logger.info("Enqueued inference job %s for %d candidates", job_id, len(new_candidates))
-            else:
-                if skip_inference:
-                    inference_status = "skipped"
-                elif not self.config.openai_api_key:
-                    inference_status = "skipped"  # No API key
-        
-        return QueryResult(
-            anchor_id=product_id,
-            recommendations=recommendations,
-            from_graph=from_graph,
-            from_vector=from_vector,
-            inference_status=inference_status,
-            job_id=job_id,
-        )
+                                # Original behavior: filter all connected candidates
+                                connected = edge_store.get_anchor_edges(product_id, all_candidate_ids)
+                                new_candidates = [cid for cid in all_candidate_ids if cid not in connected]
+
+                            if new_candidates:
+                                # Serialize config for RQ (dataclass → dict)
+                                config_dict = {
+                                    "neo4j_uri": self.config.neo4j_uri,
+                                    "neo4j_user": self.config.neo4j_user,
+                                    "neo4j_password": self.config.neo4j_password,
+                                    "openai_api_key": self.config.openai_api_key,
+                                    "llm_model": self.config.llm_model,
+                                    "system_prompt_path": str(self.config.system_prompt_path),
+                                    "user_prompt_path": str(self.config.user_prompt_path),
+                                    "edge_patch_schema_path": str(self.config.edge_patch_schema_path),
+                                }
+
+                                job = self._queue.enqueue(
+                                    "adjacent.async_inference.tasks.infer_edges",
+                                    anchor_id=product_id,
+                                    candidate_ids=new_candidates,
+                                    config_dict=config_dict,
+                                    job_timeout=self.config.job_timeout,
+                                )
+                                job_id = job.id
+                                inference_status = "enqueued"
+                                candidates_enqueued = len(new_candidates)
+                                ctx.set_count("candidates_enqueued", candidates_enqueued)
+                                logger.info("Enqueued inference job %s for %d candidates", job_id, len(new_candidates))
+                else:
+                    if skip_inference:
+                        inference_status = "skipped"
+                    elif not self.config.openai_api_key:
+                        inference_status = "skipped"  # No API key
+
+            # Emit counters for query parameters and results
+            emit_counter("top_k", top_k, operation="query", trace_id=trace_id, logger=logger)
+            emit_counter("skip_inference", 1 if skip_inference else 0, operation="query",
+                        trace_id=trace_id, logger=logger)
+
+            # Set total counts on outer span
+            total_ctx.set_count("from_graph", from_graph)
+            total_ctx.set_count("from_vector", from_vector)
+            total_ctx.set_count("candidates_enqueued", candidates_enqueued)
+
+            return QueryResult(
+                anchor_id=product_id,
+                recommendations=recommendations,
+                from_graph=from_graph,
+                from_vector=from_vector,
+                inference_status=inference_status,
+                job_id=job_id,
+            )
     
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Check status of an inference job."""
