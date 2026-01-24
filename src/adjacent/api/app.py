@@ -19,11 +19,20 @@ from adjacent.async_inference.config import AsyncConfig
 from adjacent.async_inference.query_service import QueryService
 from adjacent.api.routes import router
 
-# Configure logging
+# Configure logging to both console and file
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+log_file = log_dir / "api.log"
+
+handlers = [
+    logging.StreamHandler(sys.stdout),  # Console output
+    logging.FileHandler(log_file, mode="a"),  # File output
+]
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+    handlers=handlers,
 )
 
 logger = logging.getLogger(__name__)

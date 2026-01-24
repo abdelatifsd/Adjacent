@@ -188,10 +188,7 @@ def _safe_serialize(value: Any, max_str_len: int = 500) -> Any:
 
     if isinstance(value, dict):
         # Only serialize top-level keys, avoid deep nesting
-        return {
-            str(k): _safe_serialize(v, max_str_len)
-            for k, v in value.items()
-        }
+        return {str(k): _safe_serialize(v, max_str_len) for k, v in value.items()}
 
     # Fallback: convert to string
     str_value = str(value)
@@ -225,10 +222,7 @@ def emit_event(event: Dict[str, Any], logger: logging.Logger) -> None:
         safe_event["schema_version"] = METRICS_SCHEMA_VERSION
 
     # Safe serialize all values
-    serialized = {
-        k: _safe_serialize(v)
-        for k, v in safe_event.items()
-    }
+    serialized = {k: _safe_serialize(v) for k, v in safe_event.items()}
 
     # Emit as single-line JSON
     logger.info(json.dumps(serialized, separators=(",", ":")))
@@ -241,7 +235,7 @@ def emit_counter(
     operation: Optional[str] = None,
     trace_id: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
-    **attrs: Any
+    **attrs: Any,
 ) -> None:
     """
     Emit a standalone counter event.
@@ -291,7 +285,7 @@ class SpanContext:
         operation: Optional[str],
         trace_id: Optional[str],
         logger: logging.Logger,
-        attrs: Dict[str, Any]
+        attrs: Dict[str, Any],
     ):
         self.name = name
         self.operation = operation
@@ -366,7 +360,7 @@ def span(
     operation: Optional[str] = None,
     trace_id: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
-    **attrs: Any
+    **attrs: Any,
 ) -> Iterator[SpanContext]:
     """
     Context manager for measuring operation duration.

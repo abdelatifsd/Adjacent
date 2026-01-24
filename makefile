@@ -94,12 +94,12 @@ worker:
 	@if [ -f .env ]; then \
 		echo "Loading environment from .env file..."; \
 		export $$(cat .env | grep -v '^#' | xargs) && \
-		PYTHONPATH=src uv run rq worker adjacent_inference \
+		OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES PYTHONPATH=src uv run rq worker adjacent_inference \
 			--url redis://localhost:6379/0 \
 			--with-scheduler; \
 	else \
 		echo "Warning: .env file not found"; \
-		PYTHONPATH=src uv run rq worker adjacent_inference \
+		OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES PYTHONPATH=src uv run rq worker adjacent_inference \
 			--url redis://localhost:6379/0 \
 			--with-scheduler; \
 	fi

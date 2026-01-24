@@ -17,10 +17,9 @@ class EmbeddingResult:
     product_id: str | None = None
 
 
-
 class EmbeddingService:
     """High-level service for embedding operations.
-    
+
     Wraps a provider and adds metadata to results.
     """
 
@@ -41,11 +40,11 @@ class EmbeddingService:
         self, products: List[Dict[str, Any]], text_field: str = "embed_text"
     ) -> List[EmbeddingResult]:
         """Embed a batch of products.
-        
+
         Args:
             products: List of product dictionaries
             text_field: Key to extract text from each product
-            
+
         Returns:
             List of EmbeddingResult objects, aligned with input products
         """
@@ -53,7 +52,9 @@ class EmbeddingService:
             texts = [p[text_field] for p in products]
 
         except KeyError as e:
-            raise KeyError(f"Missing required field '{text_field}' in one or more products") from e
+            raise KeyError(
+                f"Missing required field '{text_field}' in one or more products"
+            ) from e
 
         product_ids = [p["id"] for p in products]
 
@@ -61,8 +62,9 @@ class EmbeddingService:
 
         # Guarantee alignment
         if len(embeddings) != len(texts):
-            raise ValueError(f"Embedding count mismatch: got {len(embeddings)} for {len(texts)} texts")
-
+            raise ValueError(
+                f"Embedding count mismatch: got {len(embeddings)} for {len(texts)} texts"
+            )
 
         return [
             EmbeddingResult(

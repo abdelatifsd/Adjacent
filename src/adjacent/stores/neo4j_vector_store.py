@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class Neo4jVectorStore:
     """Handles vector storage and vector-based similarity search in Neo4j.
-    
+
     Note: This implements pure vector similarity search. True "hybrid search"
     (vector + keyword/fulltext) requires additional indices and score blending.
     """
@@ -40,18 +40,21 @@ class Neo4jVectorStore:
                     When providing a driver, the caller is responsible for closing it.
         """
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", index_name):
-            raise ValueError("index_name must be a valid Neo4j identifier (letters, digits, underscore)")
+            raise ValueError(
+                "index_name must be a valid Neo4j identifier (letters, digits, underscore)"
+            )
 
         self._owns_driver = driver is None
         if driver is not None:
             self.driver = driver
         else:
             if not all([uri, user, password]):
-                raise ValueError("Either driver or (uri, user, password) must be provided")
+                raise ValueError(
+                    "Either driver or (uri, user, password) must be provided"
+                )
             self.driver = GraphDatabase.driver(uri, auth=(user, password))
 
         self.index_name = index_name
-
 
     def __enter__(self):
         """Context manager entry."""
@@ -69,7 +72,7 @@ class Neo4jVectorStore:
 
     def create_vector_index(self, dimension: int) -> None:
         """Create a vector index for similarity search.
-        
+
         Args:
             dimension: Embedding vector dimension size
         """
@@ -86,7 +89,9 @@ class Neo4jVectorStore:
         """
         with self.driver.session() as session:
             session.run(create_index)
-        logger.info("Created vector index '%s' with dimension %d", self.index_name, dimension)
+        logger.info(
+            "Created vector index '%s' with dimension %d", self.index_name, dimension
+        )
 
     def upsert_embeddings(
         self,
@@ -96,13 +101,13 @@ class Neo4jVectorStore:
         batch_size: int = 500,
     ) -> Tuple[int, int]:
         """Update products with embeddings and metadata.
-        
+
         Args:
             product_ids: List of product IDs
             embeddings: List of embedding vectors (must align with product_ids)
             model_name: Model identifier (stored for reproducibility)
             batch_size: Number of products to update per batch
-            
+
         Returns:
             Tuple of (successful_updates, missing_ids_count)
         """
@@ -154,7 +159,8 @@ class Neo4jVectorStore:
                     missing = len(batch_ids) - batch_updated
                     logger.warning(
                         "Batch %d: %d product IDs not found",
-                        i // batch_size + 1, missing
+                        i // batch_size + 1,
+                        missing,
                     )
 
         missing_total = expected_total - total_updated
@@ -199,17 +205,30 @@ class Neo4jVectorStore:
 
         # Default to full projection for backward compatibility
         if fields is None:
-            fields = ["id", "title", "description", "category", "brand", "tags", "price", "currency"]
+            fields = [
+                "id",
+                "title",
+                "description",
+                "category",
+                "brand",
+                "tags",
+                "price",
+                "currency",
+            ]
         else:
             if not fields:
-                raise ValueError("fields must be a non-empty list, or None for default projection")
+                raise ValueError(
+                    "fields must be a non-empty list, or None for default projection"
+                )
 
             # De-duplicate while preserving order.
             seen: set[str] = set()
             normalized_fields: List[str] = []
             for f in fields:
                 if not isinstance(f, str):
-                    raise TypeError(f"Field names must be strings, got {type(f).__name__}")
+                    raise TypeError(
+                        f"Field names must be strings, got {type(f).__name__}"
+                    )
                 if f in seen:
                     continue
                 seen.add(f)

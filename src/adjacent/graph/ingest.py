@@ -17,11 +17,13 @@ from adjacent.db import Neo4jContext
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class Neo4jConfig:
     uri: str
     user: str
     password: str
+
 
 # ----------------------------
 # Expected input format
@@ -198,7 +200,12 @@ def main() -> None:
             neo4j_ctx.driver, products, optional_fields, batch_size=args.batch_size
         )
 
-        logger.info("✓ Ingested %d products in %d batches into Neo4j (%s)", n, batches, args.neo4j_uri)
+        logger.info(
+            "✓ Ingested %d products in %d batches into Neo4j (%s)",
+            n,
+            batches,
+            args.neo4j_uri,
+        )
         logger.info("Schema: %s", schema_path)
 
 

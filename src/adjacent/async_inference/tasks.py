@@ -8,17 +8,41 @@ These tasks are enqueued by QueryService and processed by workers.
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
 from adjacent.stores.neo4j_edge_store import Neo4jEdgeStore, Neo4jEdgeStoreConfig
-from adjacent.llm.edge_inference import EdgeInferenceService, EdgeInferenceConfig, LLMInferenceResult
+from adjacent.llm.edge_inference import EdgeInferenceService, EdgeInferenceConfig
 from adjacent.llm.views import project, project_many
-from adjacent.graph.materializer import EdgeMaterializer, compute_edge_id, canonical_pair
+from adjacent.graph.materializer import (
+    EdgeMaterializer,
+    compute_edge_id,
+    canonical_pair,
+)
 from adjacent.async_inference.config import AsyncConfig
 from adjacent.db import Neo4jContext
 from commons.metrics import span, generate_trace_id
+
+# Configure logging for worker (runs when worker imports this module)
+# Only configure if not already configured (avoid duplicate handlers)
+if not logging.getLogger().handlers:
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "worker.log"
+
+    handlers = [
+        logging.StreamHandler(sys.stdout),  # Console output
+        logging.FileHandler(log_file, mode="a"),  # File output
+    ]
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=handlers,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +80,12 @@ def infer_edges(
         config = AsyncConfig()
 
     trace_id = generate_trace_id()
-    logger.info("Starting inference task: anchor=%s, candidates=%d (trace_id=%s)",
-                anchor_id, len(candidate_ids), trace_id)
+    logger.info(
+        "Starting inference task: anchor=%s, candidates=%d (trace_id=%s)",
+        anchor_id,
+        len(candidate_ids),
+        trace_id,
+    )
 
     # Validate we have LLM credentials
     if not config.openai_api_key:
@@ -76,12 +104,20 @@ def infer_edges(
     )
 
     try:
-        with span("infer_edges_total", operation="infer_edges", trace_id=trace_id,
-                  logger=logger, anchor_id=anchor_id) as total_ctx:
-
+        with span(
+            "infer_edges_total",
+            operation="infer_edges",
+            trace_id=trace_id,
+            logger=logger,
+            anchor_id=anchor_id,
+        ) as total_ctx:
             # Fetch products
-            with span("fetch_products", operation="infer_edges", trace_id=trace_id,
-                      logger=logger) as ctx:
+            with span(
+                "fetch_products",
+                operation="infer_edges",
+                trace_id=trace_id,
+                logger=logger,
+            ) as ctx:
                 anchor = neo4j_ctx.fetch_product(anchor_id)
                 if not anchor:
                     return {
@@ -110,7 +146,9 @@ def infer_edges(
                 user_prompt_path=config.user_prompt_path,
                 edge_schema_path=config.edge_patch_schema_path,
             )
-            edge_inference = EdgeInferenceService(client=client, config=inference_config)
+            edge_inference = EdgeInferenceService(
+                client=client, config=inference_config
+            )
 
             # Initialize stores
             edge_store_config = Neo4jEdgeStoreConfig(
@@ -125,8 +163,9 @@ def infer_edges(
             candidate_views = project_many(candidates)
 
             # Call LLM
-            with span("llm_call", operation="infer_edges", trace_id=trace_id,
-                      logger=logger) as ctx:
+            with span(
+                "llm_call", operation="infer_edges", trace_id=trace_id, logger=logger
+            ) as ctx:
                 try:
                     result = edge_inference.construct_patch(
                         anchor=anchor_view,
@@ -138,7 +177,9 @@ def infer_edges(
                     # Set attributes (lightweight metadata)
                     ctx.set_attr("model", llm_meta.get("model"))
                     ctx.set_attr("response_id", llm_meta.get("response_id"))
-                    ctx.set_attr("system_prompt_hash", llm_meta.get("system_prompt_hash"))
+                    ctx.set_attr(
+                        "system_prompt_hash", llm_meta.get("system_prompt_hash")
+                    )
                     ctx.set_attr("user_prompt_hash", llm_meta.get("user_prompt_hash"))
                     ctx.set_attr("status", llm_meta.get("status"))
                     if llm_meta.get("service_tier"):
@@ -150,7 +191,9 @@ def infer_edges(
                     ctx.set_count("output_tokens", llm_meta.get("output_tokens", 0))
                     ctx.set_count("total_tokens", llm_meta.get("total_tokens", 0))
                     ctx.set_count("cached_tokens", llm_meta.get("cached_tokens", 0))
-                    ctx.set_count("reasoning_tokens", llm_meta.get("reasoning_tokens", 0))
+                    ctx.set_count(
+                        "reasoning_tokens", llm_meta.get("reasoning_tokens", 0)
+                    )
                 except Exception as e:
                     logger.error("LLM inference failed: %s", e)
                     return {
@@ -160,7 +203,9 @@ def infer_edges(
                         "error": f"LLM inference failed: {e}",
                     }
 
-            logger.info("LLM returned %d patches for anchor %s", len(patches), anchor_id)
+            logger.info(
+                "LLM returned %d patches for anchor %s", len(patches), anchor_id
+            )
 
             # Materialize and store
             edges_created = 0
@@ -170,16 +215,24 @@ def infer_edges(
             anchor_edges_created = 0
             candidate_edges_created = 0
 
-            with span("materialize_and_upsert", operation="infer_edges", trace_id=trace_id,
-                      logger=logger) as ctx:
-                with Neo4jEdgeStore(edge_store_config, driver=neo4j_ctx.driver) as edge_store:
+            with span(
+                "materialize_and_upsert",
+                operation="infer_edges",
+                trace_id=trace_id,
+                logger=logger,
+            ) as ctx:
+                with Neo4jEdgeStore(
+                    edge_store_config, driver=neo4j_ctx.driver
+                ) as edge_store:
                     for patch in patches:
                         edge_type = patch["edge_type"]
                         a, b = canonical_pair(patch["from_id"], patch["to_id"])
                         edge_id = compute_edge_id(edge_type, a, b)
 
                         existing = edge_store.get_edge(edge_id)
-                        existing_anchors = set((existing or {}).get("anchors_seen", []) or [])
+                        existing_anchors = set(
+                            (existing or {}).get("anchors_seen", []) or []
+                        )
 
                         full_edge = materializer.materialize(
                             patch=patch,
@@ -207,12 +260,20 @@ def infer_edges(
                 ctx.set_count("edges_reinforced", edges_reinforced)
 
             # Update anchor's inference timestamp
-            with span("mark_anchor_inferred", operation="infer_edges", trace_id=trace_id,
-                      logger=logger):
+            with span(
+                "mark_anchor_inferred",
+                operation="infer_edges",
+                trace_id=trace_id,
+                logger=logger,
+            ):
                 _mark_anchor_inferred(neo4j_ctx, anchor_id)
 
-            logger.info("Inference complete: anchor=%s, created=%d, reinforced=%d",
-                        anchor_id, edges_created, edges_reinforced)
+            logger.info(
+                "Inference complete: anchor=%s, created=%d, reinforced=%d",
+                anchor_id,
+                edges_created,
+                edges_reinforced,
+            )
 
             # Set counts on total span
             total_ctx.set_count("candidates_count", len(candidates))

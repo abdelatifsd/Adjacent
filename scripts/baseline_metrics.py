@@ -68,10 +68,14 @@ def run_baseline_queries(
         # Get a sample of product IDs from the database
         # For baseline, we'll need some existing product IDs
         # You may need to adjust this based on your actual data
-        print(f"# Running {num_queries} queries (top_k={top_k}, skip_inference={skip_inference})",
-              file=sys.stderr)
-        print(f"# Starting baseline collection at {time.strftime('%Y-%m-%d %H:%M:%S')}",
-              file=sys.stderr)
+        print(
+            f"# Running {num_queries} queries (top_k={top_k}, skip_inference={skip_inference})",
+            file=sys.stderr,
+        )
+        print(
+            f"# Starting baseline collection at {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            file=sys.stderr,
+        )
 
         # Example: Query the same product multiple times to measure consistency
         # In production, you'd query different products
@@ -83,7 +87,10 @@ def run_baseline_queries(
 
         if not sample_product_ids:
             print("# ERROR: No sample product IDs configured", file=sys.stderr)
-            print("# Edit this script and add real product IDs from your database", file=sys.stderr)
+            print(
+                "# Edit this script and add real product IDs from your database",
+                file=sys.stderr,
+            )
             return
 
         for i in range(num_queries):
@@ -96,18 +103,23 @@ def run_baseline_queries(
                     top_k=top_k,
                     skip_inference=skip_inference,
                 )
-                print(f"# Query {i+1}/{num_queries} completed: "
-                      f"{len(result.recommendations)} recommendations", file=sys.stderr)
+                print(
+                    f"# Query {i + 1}/{num_queries} completed: "
+                    f"{len(result.recommendations)} recommendations",
+                    file=sys.stderr,
+                )
 
             except Exception as e:
-                print(f"# Query {i+1}/{num_queries} failed: {e}", file=sys.stderr)
+                print(f"# Query {i + 1}/{num_queries} failed: {e}", file=sys.stderr)
                 continue
 
             # Small delay between queries
             time.sleep(0.1)
 
-        print(f"# Baseline collection completed at {time.strftime('%Y-%m-%d %H:%M:%S')}",
-              file=sys.stderr)
+        print(
+            f"# Baseline collection completed at {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            file=sys.stderr,
+        )
 
 
 def main():
@@ -140,23 +152,25 @@ def main():
     args = parser.parse_args()
 
     # Configure clean JSONL logging
-    logger = configure_metrics_logger(
+    configure_metrics_logger(
         logger_name="adjacent",
         level=logging.INFO,
         output_file=args.output,
     )
 
     # Also configure the specific module loggers
-    configure_metrics_logger("adjacent.async_inference.query_service", logging.INFO, args.output)
+    configure_metrics_logger(
+        "adjacent.async_inference.query_service", logging.INFO, args.output
+    )
     configure_metrics_logger("commons.metrics", logging.INFO, args.output)
 
-    print(f"# Adjacent Baseline Metrics Collection", file=sys.stderr)
-    print(f"# ====================================", file=sys.stderr)
+    print("# Adjacent Baseline Metrics Collection", file=sys.stderr)
+    print("# ====================================", file=sys.stderr)
     print(f"# Queries: {args.queries}", file=sys.stderr)
     print(f"# Top-K: {args.top_k}", file=sys.stderr)
     print(f"# Output: {'stdout' if not args.output else args.output}", file=sys.stderr)
     print(f"# Skip inference: {not args.with_inference}", file=sys.stderr)
-    print(f"#", file=sys.stderr)
+    print("#", file=sys.stderr)
 
     try:
         run_baseline_queries(
@@ -165,10 +179,11 @@ def main():
             skip_inference=not args.with_inference,
         )
     except KeyboardInterrupt:
-        print(f"\n# Interrupted by user", file=sys.stderr)
+        print("\n# Interrupted by user", file=sys.stderr)
     except Exception as e:
         print(f"# ERROR: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 

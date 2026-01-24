@@ -79,7 +79,9 @@ def embed_products(
     if provider_name == "openai":
         if not api_key:
             raise ValueError("api_key required when using openai provider")
-        provider = OpenAIEmbedding(api_key=api_key, model=model_name or "text-embedding-3-small")
+        provider = OpenAIEmbedding(
+            api_key=api_key, model=model_name or "text-embedding-3-small"
+        )
     elif provider_name == "huggingface":
         provider = HuggingFaceEmbedding(
             model_name=model_name or "sentence-transformers/all-MiniLM-L6-v2"
@@ -153,7 +155,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--neo4j-user", default="neo4j")
     p.add_argument("--neo4j-password", default="adjacent123")
     p.add_argument("--limit", type=int, help="Limit number of products to embed")
-    p.add_argument("--batch-size", type=int, default=32, help="Batch size for embedding")
+    p.add_argument(
+        "--batch-size", type=int, default=32, help="Batch size for embedding"
+    )
     return p.parse_args()
 
 

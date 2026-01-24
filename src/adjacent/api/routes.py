@@ -37,7 +37,9 @@ async def health() -> Dict[str, str]:
 async def query(
     request: Request,
     product_id: str,
-    top_k: int = Query(10, ge=1, le=100, description="Number of recommendations to return"),
+    top_k: int = Query(
+        10, ge=1, le=100, description="Number of recommendations to return"
+    ),
     skip_inference: bool = Query(False, description="Skip async inference"),
     x_trace_id: str | None = Header(None, alias="X-Trace-Id"),
 ) -> Dict[str, Any]:
@@ -129,7 +131,9 @@ async def query(
 async def perf_query(
     request: Request,
     product_id: str,
-    top_k: int = Query(10, ge=1, le=100, description="Number of recommendations to return"),
+    top_k: int = Query(
+        10, ge=1, le=100, description="Number of recommendations to return"
+    ),
     skip_inference: bool = Query(False, description="Skip async inference"),
     x_trace_id: str | None = Header(None, alias="X-Trace-Id"),
 ) -> Dict[str, Any]:
@@ -360,7 +364,10 @@ async def system_status(request: Request) -> Dict[str, Any]:
                     index_type = record.get("type", "")
 
                     # Look for vector index (either by name or type)
-                    if "vector" in index_type.lower() or index_name == "product_embedding":
+                    if (
+                        "vector" in index_type.lower()
+                        or index_name == "product_embedding"
+                    ):
                         response["neo4j"]["vector_index"] = {
                             "present": True,
                             "state": record.get("state", "ONLINE"),

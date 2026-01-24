@@ -3,9 +3,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Sequence
 
+
 class EmbeddingProvider(ABC):
     """Abstract base class for embedding providers.
-    
+
     All providers must implement embed and embed_batch methods.
     Dimension is measured lazily on first use, not assumed.
     """
@@ -21,7 +22,7 @@ class EmbeddingProvider(ABC):
     @abstractmethod
     def embed_batch(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
         """Embed multiple texts in batches.
-        
+
         Guarantees:
         - Output length equals input length
         - Order preserved
@@ -36,7 +37,7 @@ class EmbeddingProvider(ABC):
 
     def get_dimension(self) -> int:
         """Return embedding dimension size.
-        
+
         Measured lazily on first call, not assumed from model name.
         """
         if self._dimension is None:
@@ -64,7 +65,7 @@ class OpenAIEmbedding(EmbeddingProvider):
         self, texts: Sequence[str], batch_size: int = 100
     ) -> List[List[float]]:
         """Embed multiple texts. OpenAI supports up to 100 texts per request.
-        
+
         Note: OpenAI typically preserves order, but we verify alignment.
         """
         if not texts:
@@ -74,13 +75,13 @@ class OpenAIEmbedding(EmbeddingProvider):
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
             response = self.client.embeddings.create(input=batch, model=self.model)
-            
+
             # Verify we got the expected number of embeddings
             if len(response.data) != len(batch):
                 raise ValueError(
                     f"Expected {len(batch)} embeddings, got {len(response.data)}"
                 )
-            
+
             embeddings.extend([item.embedding for item in response.data])
 
         # Final guarantee check
@@ -112,13 +113,11 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         """Embed multiple texts using sentence-transformers batching."""
         if not texts:
             return []
-        
+
         embeddings = self.model.encode(
-            texts, 
-            batch_size=batch_size, 
-            convert_to_tensor=False
+            texts, batch_size=batch_size, convert_to_tensor=False
         ).tolist()
-        
+
         # Guarantee check
         if len(embeddings) != len(texts):
             raise ValueError("Embedding count mismatch ...")

@@ -21,7 +21,6 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from pathlib import Path
 from typing import Any, Dict, List
 
 
@@ -62,19 +61,21 @@ def analyze_spans(events: List[Dict[str, Any]]) -> None:
             span_name = event.get("span")
             duration_ms = event.get("duration_ms")
             if span_name and duration_ms is not None:
-                span_data[span_name].append({
-                    "duration_ms": duration_ms,
-                    "status": event.get("status", "ok"),
-                    "operation": event.get("operation"),
-                })
+                span_data[span_name].append(
+                    {
+                        "duration_ms": duration_ms,
+                        "status": event.get("status", "ok"),
+                        "operation": event.get("operation"),
+                    }
+                )
 
     if not span_data:
         print("No span events found in metrics")
         return
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("SPAN TIMING ANALYSIS")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     # Compute statistics for each span
     for span_name, data in sorted(span_data.items()):
@@ -127,9 +128,9 @@ def analyze_counters(events: List[Dict[str, Any]]) -> None:
         print("No counter events found in metrics\n")
         return
 
-    print("="*80)
+    print("=" * 80)
     print("COUNTER ANALYSIS")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     for counter_name, values in sorted(counter_data.items()):
         count = len(values)
@@ -161,9 +162,9 @@ def analyze_span_counts(events: List[Dict[str, Any]]) -> None:
         print("No span count data found in metrics\n")
         return
 
-    print("="*80)
+    print("=" * 80)
     print("SPAN COUNTS ANALYSIS")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     for span_name, counts in sorted(span_counts.items()):
         print(f"Span: {span_name}")
@@ -171,7 +172,9 @@ def analyze_span_counts(events: List[Dict[str, Any]]) -> None:
             count = len(values)
             total = sum(values)
             mean = total / count if count > 0 else 0
-            print(f"  {count_name:20s}: total={total:6.0f}, mean={mean:6.2f}, count={count}")
+            print(
+                f"  {count_name:20s}: total={total:6.0f}, mean={mean:6.2f}, count={count}"
+            )
         print()
 
 

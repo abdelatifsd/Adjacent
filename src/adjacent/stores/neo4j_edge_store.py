@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable, Set, Optional, List, Dict, Any
-import re, json
+import re
+import json
 
 from neo4j import GraphDatabase, Driver
 
@@ -62,7 +63,9 @@ class Neo4jEdgeStore:
         if not ident.fullmatch(self.config.rel_type):
             raise ValueError(f"Invalid rel_type: {self.config.rel_type}")
 
-    def get_anchor_edges(self, anchor_id: str, candidate_ids: Iterable[str]) -> Set[str]:
+    def get_anchor_edges(
+        self, anchor_id: str, candidate_ids: Iterable[str]
+    ) -> Set[str]:
         """
         Return the set of candidate IDs that already have *any* recommendation
         edge with the anchor.
@@ -109,10 +112,10 @@ class Neo4jEdgeStore:
         """
         Return a dict mapping candidate_id -> edge metadata for edges between
         anchor and candidates.
-        
+
         Used for endpoint reinforcement: allows checking anchors_seen count
         and confidence to decide whether to allow reinforcement.
-        
+
         NOTE: Multiple semantic edge types can exist between the same product
         pair. This method aggregates across *all* relationships between
         (anchor_id, candidate_id) so the caller's gating logic is stable.
@@ -126,7 +129,7 @@ class Neo4jEdgeStore:
         candidates: List[str] = list(candidate_ids)
         if not candidates:
             return {}
-        
+
         cypher = f"""
         MATCH (a:{self.config.product_label} {{id: $anchor_id}})
         MATCH (a)-[r:{self.config.rel_type}]-(c:{self.config.product_label})
@@ -136,14 +139,16 @@ class Neo4jEdgeStore:
             max(size(coalesce(r.anchors_seen, []))) AS max_anchor_count,
             max(coalesce(r.confidence_0_to_1, 0.0)) AS max_confidence
         """
-        
+
         with self.driver.session() as session:
-            records = list(session.run(
-                cypher,
-                anchor_id=anchor_id,
-                candidate_ids=candidates,
-            ))
-        
+            records = list(
+                session.run(
+                    cypher,
+                    anchor_id=anchor_id,
+                    candidate_ids=candidates,
+                )
+            )
+
         result = {}
         for rec in records:
             candidate_id = rec["candidate_id"]
@@ -153,7 +158,7 @@ class Neo4jEdgeStore:
                 "max_anchor_count": int(max_anchor_count),
                 "max_confidence_0_to_1": float(max_confidence),
             }
-        
+
         return result
 
     def upsert_edge(self, edge: Dict[str, Any]) -> None:
@@ -185,7 +190,9 @@ class Neo4jEdgeStore:
 
         # Store edge_props as JSON string (v1)
         edge_props = edge.get("edge_props") or {}
-        rel_props["edge_props_json"] = json.dumps(edge_props, ensure_ascii=False, separators=(",", ":"))
+        rel_props["edge_props_json"] = json.dumps(
+            edge_props, ensure_ascii=False, separators=(",", ":")
+        )
 
         cypher = f"""
         MERGE (a:{self.config.product_label} {{id: $from_id}})
@@ -332,4 +339,3 @@ class Neo4jEdgeStore:
             )
 
         return out
-

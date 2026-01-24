@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 
 def utc_now() -> str:
@@ -78,11 +78,7 @@ class EdgeMaterializer:
 
         confidence = confidence_from_anchors(len(anchors_seen))
 
-        status = (
-            "ACTIVE"
-            if confidence >= 0.7
-            else "PROPOSED"
-        )
+        status = "ACTIVE" if confidence >= 0.7 else "PROPOSED"
 
         edge = {
             "edge_id": compute_edge_id(edge_type, a, b),
