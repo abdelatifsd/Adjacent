@@ -6,13 +6,14 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Tuple, List
-from neo4j import GraphDatabase
+from neo4j import Driver
 from tqdm import tqdm
 from adjacent.graph.io import iter_records
 from adjacent.graph.validate import build_product_validator, validate_product_record
 from adjacent.graph.normalize import ProductNormalizer, RequiredConfig
 from commons.utils import load_json
 from jsonschema import Draft202012Validator
+from adjacent.db import Neo4jContext
 
 logger = logging.getLogger(__name__)
 
@@ -93,27 +94,26 @@ def build_upsert_cypher(optional_fields: set[str]) -> str:
     return "\n".join(cypher_parts)
 
 
-def ensure_constraints(cfg: Neo4jConfig) -> None:
+def ensure_constraints(driver: Driver) -> None:
+    """Create Neo4j constraints using the provided driver."""
     logger.info("Creating Neo4j constraints...")
-    driver = GraphDatabase.driver(cfg.uri, auth=(cfg.user, cfg.password))
-    with driver:
-        with driver.session() as session:
-            session.run(CONSTRAINT_CYPHER)
+    with driver.session() as session:
+        session.run(CONSTRAINT_CYPHER)
     logger.info("Constraints created")
 
 
 def upsert_products(
-    cfg: Neo4jConfig,
+    driver: Driver,
     products: List[Dict[str, Any]],
     optional_fields: set[str],
     batch_size: int = 25,
 ) -> Tuple[int, int]:
+    """Upsert products to Neo4j using the provided driver."""
     if not products:
         logger.info("No products to upsert")
         return (0, 0)
 
-    logger.info("Upserting %d products to Neo4j (%s)", len(products), cfg.uri)
-    driver = GraphDatabase.driver(cfg.uri, auth=(cfg.user, cfg.password))
+    logger.info("Upserting %d products to Neo4j", len(products))
     batch_count = 0
 
     # Ensure keys exist for optional fields to simplify Cypher FOREACH checks
@@ -128,12 +128,11 @@ def upsert_products(
     # Build Cypher dynamically
     upsert_cypher = build_upsert_cypher(optional_fields)
 
-    with driver:
-        with driver.session() as session:
-            for i in tqdm(range(0, len(rows), batch_size), desc="Product batches"):
-                batch = rows[i : i + batch_size]
-                session.run(upsert_cypher, rows=batch)
-                batch_count += 1
+    with driver.session() as session:
+        for i in tqdm(range(0, len(rows), batch_size), desc="Product batches"):
+            batch = rows[i : i + batch_size]
+            session.run(upsert_cypher, rows=batch)
+            batch_count += 1
 
     logger.info("Upserted %d products in %d batches", len(products), batch_count)
     return (len(products), batch_count)
@@ -169,7 +168,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    
+
     args = parse_args()
 
     input_path = Path(args.input)
@@ -185,22 +184,22 @@ def main() -> None:
     normalizer: ProductNormalizer = ProductNormalizer(schema)
     optional_fields = normalizer.optional_fields
 
-    cfg = Neo4jConfig(
+    # Create shared Neo4j context
+    with Neo4jContext(
         uri=args.neo4j_uri,
         user=args.neo4j_user,
         password=args.neo4j_password,
-    )
+    ) as neo4j_ctx:
+        if not args.no_constraints:
+            ensure_constraints(neo4j_ctx.driver)
 
-    if not args.no_constraints:
-        ensure_constraints(cfg)
+        products = load_products(input_path, validator, normalizer, limit=args.limit)
+        n, batches = upsert_products(
+            neo4j_ctx.driver, products, optional_fields, batch_size=args.batch_size
+        )
 
-    products = load_products(input_path, validator, normalizer, limit=args.limit)
-    n, batches = upsert_products(
-        cfg, products, optional_fields, batch_size=args.batch_size
-    )
-
-    logger.info("✓ Ingested %d products in %d batches into Neo4j (%s)", n, batches, cfg.uri)
-    logger.info("Schema: %s", schema_path)
+        logger.info("✓ Ingested %d products in %d batches into Neo4j (%s)", n, batches, args.neo4j_uri)
+        logger.info("Schema: %s", schema_path)
 
 
 if __name__ == "__main__":

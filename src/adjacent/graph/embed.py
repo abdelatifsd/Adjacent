@@ -11,10 +11,11 @@ Parallel to ingest.py but for the embedding phase.
 import argparse
 import logging
 from typing import Dict, Any, List, Tuple
-from neo4j import GraphDatabase
+from neo4j import Driver
 
 from adjacent.embeddings import HuggingFaceEmbedding, OpenAIEmbedding, EmbeddingService
 from adjacent.stores import Neo4jVectorStore
+from adjacent.db import Neo4jContext
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +24,12 @@ logger = logging.getLogger(__name__)
 # Product Fetching
 # ----------------------------
 def fetch_products_needing_embeddings(
-    uri: str, user: str, password: str, limit: int | None = None
+    driver: Driver, limit: int | None = None
 ) -> List[Dict[str, Any]]:
     """Fetch products that need embeddings from Neo4j.
-    
+
     Returns products where embedding IS NULL or embed_text exists but embedding doesn't.
     """
-    driver = GraphDatabase.driver(uri, auth=(user, password))
-
     cypher = """
     MATCH (p:Product)
     WHERE p.embedding IS NULL
@@ -41,10 +40,9 @@ def fetch_products_needing_embeddings(
     if limit:
         cypher += f" LIMIT {limit}"
 
-    with driver:
-        with driver.session() as session:
-            result = session.run(cypher)
-            products = [dict(record) for record in result]
+    with driver.session() as session:
+        result = session.run(cypher)
+        products = [dict(record) for record in result]
 
     return products
 
@@ -63,7 +61,7 @@ def embed_products(
     batch_size: int = 32,  # Reserved for future use (providers handle batching internally)
 ) -> Tuple[int, int]:
     """Run the embedding pipeline.
-    
+
     Args:
         uri: Neo4j connection URI
         user: Neo4j username
@@ -73,7 +71,7 @@ def embed_products(
         model_name: Optional model override
         limit: Optional limit for number of products to embed
         batch_size: Batch size for embedding (reserved for future use)
-        
+
     Returns:
         Tuple of (products_embedded, products_missing)
     """
@@ -93,22 +91,25 @@ def embed_products(
     service = EmbeddingService(provider)
     logger.info("Using provider: %s", provider.get_model_name())
 
-    # Fetch products
-    logger.info("Fetching products from Neo4j...")
-    products = fetch_products_needing_embeddings(uri, user, password, limit)
-    logger.info("Found %d products needing embeddings", len(products))
+    # Create shared Neo4j context
+    with Neo4jContext(uri, user, password) as neo4j_ctx:
+        # Fetch products
+        logger.info("Fetching products from Neo4j...")
+        products = fetch_products_needing_embeddings(neo4j_ctx.driver, limit)
+        logger.info("Found %d products needing embeddings", len(products))
 
-    if not products:
-        logger.info("No products need embeddings. Done!")
-        return (0, 0)
+        if not products:
+            logger.info("No products need embeddings. Done!")
+            return (0, 0)
 
-    # Embed
-    logger.info("Generating embeddings...")
-    results = service.embed_products(products, text_field="embed_text")
-    logger.info("Embeddings dimension: %d", results[0].dimensions)
+        # Embed
+        logger.info("Generating embeddings...")
+        results = service.embed_products(products, text_field="embed_text")
+        logger.info("Embeddings dimension: %d", results[0].dimensions)
 
-    # Store in Neo4j
-    with Neo4jVectorStore(uri, user, password) as vector_store:
+        # Store in Neo4j (share the driver)
+        vector_store = Neo4jVectorStore(driver=neo4j_ctx.driver)
+
         # Create index if needed
         logger.info("Creating vector index...")
         vector_store.create_vector_index(dimension=results[0].dimensions)

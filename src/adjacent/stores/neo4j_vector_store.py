@@ -6,9 +6,9 @@ index and score blending (not yet implemented).
 """
 
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import re
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, Driver
 
 
 logger = logging.getLogger(__name__)
@@ -23,24 +23,33 @@ class Neo4jVectorStore:
 
     def __init__(
         self,
-        uri: str,
-        user: str,
-        password: str,
+        uri: Optional[str] = None,
+        user: Optional[str] = None,
+        password: Optional[str] = None,
         index_name: str = "product_embedding",
+        driver: Optional[Driver] = None,
     ):
         """Initialize vector store.
-        
+
         Args:
-            uri: Neo4j connection URI
-            user: Neo4j username
-            password: Neo4j password
+            uri: Neo4j connection URI (required if driver not provided)
+            user: Neo4j username (required if driver not provided)
+            password: Neo4j password (required if driver not provided)
             index_name: Name for the vector index (stored for consistency)
+            driver: Optional shared Neo4j driver. If provided, uri/user/password are ignored.
+                    When providing a driver, the caller is responsible for closing it.
         """
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", index_name):
             raise ValueError("index_name must be a valid Neo4j identifier (letters, digits, underscore)")
 
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
-        
+        self._owns_driver = driver is None
+        if driver is not None:
+            self.driver = driver
+        else:
+            if not all([uri, user, password]):
+                raise ValueError("Either driver or (uri, user, password) must be provided")
+            self.driver = GraphDatabase.driver(uri, auth=(user, password))
+
         self.index_name = index_name
 
 
@@ -53,8 +62,8 @@ class Neo4jVectorStore:
         self.close()
 
     def close(self):
-        """Close the Neo4j driver connection. Idempotent."""
-        if self.driver:
+        """Close the Neo4j driver connection if this instance owns it. Idempotent."""
+        if self._owns_driver and self.driver:
             self.driver.close()
             self.driver = None
 
@@ -158,38 +167,80 @@ class Neo4jVectorStore:
         return (total_updated, missing_total)
 
     def similarity_search(
-        self, query_embedding: List[float], top_k: int = 10
+        self,
+        query_embedding: List[float],
+        top_k: int = 10,
+        fields: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Find similar products using vector similarity.
-        
+
         Args:
             query_embedding: Query vector
             top_k: Number of results to return
-            
+            fields: Optional list of product fields to return. If None, returns all standard fields.
+                    Use ["id"] for minimal projection (id only).
+                    Defaults to full projection: id, title, description, category, brand, tags, price, currency.
+
         Returns:
             List of dicts with product (node projection) and similarity score.
-            Product includes: id, title, description, category, brand, tags.
         """
-        cypher = """
+        # NOTE: `fields` are interpolated into Cypher as map projection keys.
+        # Keep this safe by validating against a whitelist and identifier regex.
+        allowed_fields = {
+            "id",
+            "title",
+            "description",
+            "category",
+            "brand",
+            "tags",
+            "price",
+            "currency",
+        }
+
+        # Default to full projection for backward compatibility
+        if fields is None:
+            fields = ["id", "title", "description", "category", "brand", "tags", "price", "currency"]
+        else:
+            if not fields:
+                raise ValueError("fields must be a non-empty list, or None for default projection")
+
+            # De-duplicate while preserving order.
+            seen: set[str] = set()
+            normalized_fields: List[str] = []
+            for f in fields:
+                if not isinstance(f, str):
+                    raise TypeError(f"Field names must be strings, got {type(f).__name__}")
+                if f in seen:
+                    continue
+                seen.add(f)
+                normalized_fields.append(f)
+            fields = normalized_fields
+
+            ident = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+            for f in fields:
+                if not ident.fullmatch(f):
+                    raise ValueError(f"Invalid field name for projection: {f!r}")
+                if f not in allowed_fields:
+                    raise ValueError(
+                        f"Unsupported field for projection: {f!r}. "
+                        f"Allowed: {sorted(allowed_fields)}"
+                    )
+
+        # Build Cypher projection dynamically
+        field_projections = ", ".join(f".{field}" for field in fields)
+        cypher = f"""
         CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
         YIELD node, score
-        RETURN node {
-            .id,
-            .title,
-            .description,
-            .category,
-            .brand,
-            .tags,
-            .price,
-            .currency
-        } AS product,
+        RETURN node {{
+            {field_projections}
+        }} AS product,
         score
         ORDER BY score DESC
         """
         with self.driver.session() as session:
             result = session.run(
                 cypher,
-                index_name=self.index_name,  # Use stored index_name
+                index_name=self.index_name,
                 embedding=query_embedding,
                 top_k=top_k,
             )

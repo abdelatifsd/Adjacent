@@ -26,16 +26,26 @@ class Neo4jEdgeStore:
       and your schema's semantic 'edge_type' is stored as a relationship property.
     """
 
-    def __init__(self, config: Neo4jEdgeStoreConfig):
+    def __init__(self, config: Neo4jEdgeStoreConfig, driver: Driver | None = None):
+        """
+        Initialize the edge store.
+
+        Args:
+            config: Store configuration
+            driver: Optional shared Neo4j driver. If not provided, creates its own.
+                    When providing a driver, the caller is responsible for closing it.
+        """
         self.config = config
         self._validate_identifiers()
-        self.driver: Driver = GraphDatabase.driver(
+        self._owns_driver = driver is None
+        self.driver: Driver = driver or GraphDatabase.driver(
             config.uri,
             auth=(config.user, config.password),
         )
 
     def close(self) -> None:
-        if self.driver:
+        """Close the driver if this instance owns it."""
+        if self._owns_driver and self.driver:
             self.driver.close()
 
     def __enter__(self) -> "Neo4jEdgeStore":

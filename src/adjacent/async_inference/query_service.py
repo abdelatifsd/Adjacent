@@ -14,12 +14,12 @@ from typing import Any, Dict, List, Literal, Optional
 
 from redis import Redis
 from rq import Queue
-from neo4j import GraphDatabase
 
 from adjacent.embeddings import EmbeddingService, HuggingFaceEmbedding, OpenAIEmbedding
 from adjacent.stores import Neo4jVectorStore
 from adjacent.stores.neo4j_edge_store import Neo4jEdgeStore, Neo4jEdgeStoreConfig
 from adjacent.async_inference.config import AsyncConfig
+from adjacent.db import Neo4jContext
 
 logger = logging.getLogger(__name__)
 
@@ -72,28 +72,33 @@ class QueryResult:
 class QueryService:
     """
     Fast-path query handler.
-    
+
     Returns recommendations immediately with low latency.
     Enqueues LLM inference asynchronously for graph enrichment.
     """
-    
+
     def __init__(self, config: AsyncConfig):
         self.config = config
-        
+
         # Redis + RQ
         self._redis = Redis.from_url(config.redis_url)
         self._queue = Queue(config.queue_name, connection=self._redis)
-        
+
         # Embedding provider
         self._embedding_service = self._create_embedding_service()
-        
-        # Stores
-        self._vector_store = Neo4jVectorStore(
+
+        # Shared Neo4j driver
+        self._neo4j_ctx = Neo4jContext(
             uri=config.neo4j_uri,
             user=config.neo4j_user,
             password=config.neo4j_password,
         )
-        
+
+        # Stores (share the driver)
+        self._vector_store = Neo4jVectorStore(
+            driver=self._neo4j_ctx.driver,
+        )
+
         self._edge_store_config = Neo4jEdgeStoreConfig(
             uri=config.neo4j_uri,
             user=config.neo4j_user,
@@ -119,6 +124,8 @@ class QueryService:
         """Release resources."""
         if self._vector_store:
             self._vector_store.close()
+        if self._neo4j_ctx:
+            self._neo4j_ctx.close()
         if self._redis:
             self._redis.close()
     
@@ -130,24 +137,7 @@ class QueryService:
     
     def _fetch_product(self, product_id: str) -> Optional[Dict[str, Any]]:
         """Fetch product with embedding from Neo4j."""
-        driver = GraphDatabase.driver(
-            self.config.neo4j_uri,
-            auth=(self.config.neo4j_user, self.config.neo4j_password),
-        )
-        cypher = """
-        MATCH (p:Product {id: $product_id})
-        RETURN p {
-            .id, .title, .description, .category, .brand, .tags,
-            .price, .currency, .embedding, .last_inference_at
-        } AS product
-        """
-        with driver:
-            with driver.session() as session:
-                result = session.run(cypher, product_id=product_id)
-                record = result.single()
-                if record:
-                    return dict(record["product"])
-        return None
+        return self._neo4j_ctx.fetch_product(product_id)
     
     def _get_embedding(self, product: Dict[str, Any]) -> List[float]:
         """Get embedding from product or compute it."""
@@ -195,7 +185,7 @@ class QueryService:
         from_vector = 0
         
         # Step 1: Get existing graph edges
-        with Neo4jEdgeStore(self._edge_store_config) as edge_store:
+        with Neo4jEdgeStore(self._edge_store_config, driver=self._neo4j_ctx.driver) as edge_store:
             neighbors = edge_store.get_neighbors(
                 anchor_id=product_id,
                 limit=top_k,
@@ -218,10 +208,11 @@ class QueryService:
             
             if need_more > 0:
                 embedding = self._get_embedding(anchor)
-                
+
                 search_results = self._vector_store.similarity_search(
                     query_embedding=embedding,
                     top_k=top_k + from_graph + 1,  # Extra for filtering
+                    fields=["id"],  # Minimal projection - only need ID
                 )
                 
                 # Filter out anchor and already-recommended
