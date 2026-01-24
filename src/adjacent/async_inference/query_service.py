@@ -157,6 +157,7 @@ class QueryService:
         *,
         top_k: int = 10,
         skip_inference: bool = False,
+        trace_id: str | None = None,
     ) -> QueryResult:
         """
         Get recommendations with guaranteed low latency.
@@ -170,11 +171,12 @@ class QueryService:
             product_id: Anchor product ID
             top_k: Number of recommendations to return
             skip_inference: If True, don't enqueue inference task
+            trace_id: Optional trace ID for request correlation
 
         Returns:
             QueryResult with recommendations and metadata
         """
-        trace_id = generate_trace_id()
+        trace_id = trace_id or generate_trace_id()
         logger.info("Query for product: %s (trace_id=%s)", product_id, trace_id)
 
         with span("query_total", operation="query", trace_id=trace_id, logger=logger,

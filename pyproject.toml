@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "check-jsonschema>=0.30.0",
+    "fastapi>=0.115.0",
     "jsonschema>=4.26.0",
     "neo4j>=5.27.0,<6.0.0",
     "networkx>=3.6.1",
@@ -16,6 +17,7 @@ dependencies = [
     "rq>=1.16.0",
     "sentence-transformers>=5.2.0",
     "tqdm>=4.67.1",
+    "uvicorn>=0.32.0",
 ]
 
 [dependency-groups]
