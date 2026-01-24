@@ -272,3 +272,131 @@ async def get_job(request: Request, job_id: str) -> Dict[str, Any]:
                 "error_type": "internal_error",
             },
         )
+
+
+@router.get("/v1/system/status")
+async def system_status(request: Request) -> Dict[str, Any]:
+    """
+    Get system status snapshot.
+
+    Returns health and configuration status for Neo4j, Redis, and the inference system.
+    Fast, read-only endpoint that degrades gracefully.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        System status including Neo4j, Redis, and dynamics information
+
+    Raises:
+        503: Neo4j is unreachable (critical dependency)
+    """
+    query_service: QueryService = request.app.state.query_service
+
+    # Initialize response structure
+    response: Dict[str, Any] = {
+        "status": "ok",
+        "neo4j": {
+            "connected": False,
+            "product_count": 0,
+            "inferred_edge_count": 0,
+            "vector_index": {
+                "present": False,
+                "state": None,
+                "name": None,
+            },
+        },
+        "inference": {
+            "redis_connected": False,
+            "queue_enabled": False,
+            "queue_name": query_service.config.queue_name,
+            "pending_jobs": None,
+        },
+        "dynamics": {
+            "graph_coverage_pct": None,
+            "notes": [
+                "Cold start is expected: vector recommendations dominate until async inference creates edges.",
+                "Inferred edges and graph coverage increase over time as the worker runs.",
+            ],
+        },
+    }
+
+    # Check Neo4j connectivity and get stats
+    try:
+        driver = query_service._neo4j_ctx.driver
+
+        with driver.session() as session:
+            # Test connectivity
+            session.run("RETURN 1").single()
+            response["neo4j"]["connected"] = True
+
+            # Get product count
+            result = session.run("MATCH (p:Product) RETURN count(p) AS count")
+            product_count = result.single()["count"]
+            response["neo4j"]["product_count"] = product_count
+
+            # Get inferred edge count
+            result = session.run(
+                "MATCH ()-[r:RECOMMENDATION]->() RETURN count(r) AS count"
+            )
+            edge_count = result.single()["count"]
+            response["neo4j"]["inferred_edge_count"] = edge_count
+
+            # Calculate graph coverage percentage
+            if product_count > 0:
+                result = session.run(
+                    "MATCH (p:Product)-[:RECOMMENDATION]-() "
+                    "RETURN count(DISTINCT p) AS products_with_edges"
+                )
+                products_with_edges = result.single()["products_with_edges"]
+                coverage_pct = round((products_with_edges / product_count) * 100, 1)
+                response["dynamics"]["graph_coverage_pct"] = coverage_pct
+
+            # Check vector index status
+            try:
+                result = session.run("SHOW INDEXES")
+                for record in result:
+                    index_name = record.get("name", "")
+                    index_type = record.get("type", "")
+
+                    # Look for vector index (either by name or type)
+                    if "vector" in index_type.lower() or index_name == "product_embedding":
+                        response["neo4j"]["vector_index"] = {
+                            "present": True,
+                            "state": record.get("state", "ONLINE"),
+                            "name": index_name,
+                        }
+                        break
+            except Exception as e:
+                logger.warning("Failed to check vector index status: %s", e)
+                # Leave vector_index as default values
+
+    except Exception as e:
+        logger.exception("Neo4j connection failed: %s", e)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "Neo4j unavailable",
+                "error_type": "neo4j_unavailable",
+            },
+        )
+
+    # Check Redis/RQ status (degrade gracefully)
+    try:
+        # Test Redis connectivity
+        query_service._redis.ping()
+        response["inference"]["redis_connected"] = True
+        response["inference"]["queue_enabled"] = True
+
+        # Get queue length
+        try:
+            queue_length = len(query_service._queue)
+            response["inference"]["pending_jobs"] = queue_length
+        except Exception as e:
+            logger.warning("Failed to get queue length: %s", e)
+
+    except Exception as e:
+        logger.warning("Redis connection failed: %s", e)
+        # Leave redis_connected as False, queue_enabled as False
+
+    return response

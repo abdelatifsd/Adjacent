@@ -134,6 +134,46 @@ This loop repeats, gradually enriching the graph with both direct and transitive
 
 ---
 
+## Documentation & Guides
+
+### Getting Started
+
+- **[System Dynamics & Cold Start Guide](docs/system_dynamics.md)** - Essential reading for first-time users
+  - Understand cold start behavior and what to expect
+  - Learn how the system evolves from vector-only to graph+vector
+  - First run checklist and validation steps
+  - Use the `/v1/system/status` endpoint to monitor system health
+
+- **[API Reference](docs/api.md)** - Complete HTTP API documentation
+  - Quick start instructions
+  - Environment setup
+  - Endpoint reference with examples
+  - Running the server and worker
+
+### Deep Dives
+
+- **[Async Architecture](docs/async_architecture.md)** - Detailed explanation of the inference system
+  - How QueryService and Worker interact
+  - Job queueing and status tracking
+  - Performance characteristics
+
+- **[Metrics Guide](docs/metrics.md)** - Performance instrumentation details
+
+### Key Endpoints
+
+```bash
+# Check system health and dynamics
+curl http://localhost:8000/v1/system/status
+
+# Get recommendations
+curl http://localhost:8000/v1/query/product_123?top_k=10
+
+# Check job status
+curl http://localhost:8000/v1/jobs/abc-123
+```
+
+---
+
 ## Edge Model
 
 All recommendation edges are:
