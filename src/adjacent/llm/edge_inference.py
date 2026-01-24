@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,13 @@ class EdgeInferenceConfig:
     user_prompt_path: Path
     edge_schema_path: Path
     schema_name: str = "RecommendationEdgePatch"
+
+
+@dataclass(frozen=True)
+class LLMInferenceResult:
+    """Result from LLM inference including patches and metadata."""
+    patches: List[Dict[str, Any]]
+    metadata: Dict[str, Any]
 
 
 class EdgeInferenceService:
@@ -66,6 +74,15 @@ class EdgeInferenceService:
             },
         }
 
+    @staticmethod
+    def _hash_prompt(content: str) -> str:
+        """Compute deterministic hash of prompt content.
+
+        Uses SHA256 for stability; truncates to 16 chars for readability.
+        Different prompt versions produce different hashes.
+        """
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
     def _to_view(self, product: Union[Dict[str, Any], LLMProductView]) -> LLMProductView:
         """Convert product to LLMProductView if needed."""
         if isinstance(product, LLMProductView):
@@ -89,16 +106,16 @@ class EdgeInferenceService:
         candidates: List[Union[Dict[str, Any], LLMProductView]],
         *,
         request_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> LLMInferenceResult:
         """Infer edges between anchor and candidates.
-        
+
         Args:
             anchor: Anchor product (raw dict or LLMProductView)
             candidates: Candidate products (raw dicts or LLMProductView)
             request_id: Optional request ID for tracking
-            
+
         Returns:
-            List of edge patch dicts conforming to edge_patch.json schema
+            LLMInferenceResult with patches and metadata (token usage, model info, etc.)
         """
         # Project to LLMProductView for consistent input
         anchor_view = self._to_view(anchor)
@@ -130,4 +147,35 @@ class EdgeInferenceService:
         if not isinstance(edges, list):
             raise ValueError("Structured output returned non-list 'edges' field")
 
-        return edges
+        # Extract metadata for metrics instrumentation
+        metadata = {
+            # Identifiers
+            "response_id": resp.id,
+            "model": resp.model,
+            "status": resp.status,
+
+            # Prompt hashes for version tracking
+            "system_prompt_hash": self._hash_prompt(self._system_prompt),
+            "user_prompt_hash": self._hash_prompt(user_prompt),
+
+            # Token counts (safe access with default 0)
+            "input_tokens": resp.usage.input_tokens if resp.usage else 0,
+            "output_tokens": resp.usage.output_tokens if resp.usage else 0,
+            "total_tokens": resp.usage.total_tokens if resp.usage else 0,
+            "cached_tokens": (
+                resp.usage.input_tokens_details.cached_tokens
+                if resp.usage and resp.usage.input_tokens_details
+                else 0
+            ),
+            "reasoning_tokens": (
+                resp.usage.output_tokens_details.reasoning_tokens
+                if resp.usage and resp.usage.output_tokens_details
+                else 0
+            ),
+        }
+
+        # Add optional fields if present
+        if resp.service_tier:
+            metadata["service_tier"] = resp.service_tier
+
+        return LLMInferenceResult(patches=edges, metadata=metadata)

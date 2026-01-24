@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 
 from adjacent.stores.neo4j_edge_store import Neo4jEdgeStore, Neo4jEdgeStoreConfig
-from adjacent.llm.edge_inference import EdgeInferenceService, EdgeInferenceConfig
+from adjacent.llm.edge_inference import EdgeInferenceService, EdgeInferenceConfig, LLMInferenceResult
 from adjacent.llm.views import project, project_many
 from adjacent.graph.materializer import EdgeMaterializer, compute_edge_id, canonical_pair
 from adjacent.async_inference.config import AsyncConfig
@@ -128,11 +128,29 @@ def infer_edges(
             with span("llm_call", operation="infer_edges", trace_id=trace_id,
                       logger=logger) as ctx:
                 try:
-                    patches = edge_inference.construct_patch(
+                    result = edge_inference.construct_patch(
                         anchor=anchor_view,
                         candidates=candidate_views,
                     )
+                    patches = result.patches
+                    llm_meta = result.metadata
+
+                    # Set attributes (lightweight metadata)
+                    ctx.set_attr("model", llm_meta.get("model"))
+                    ctx.set_attr("response_id", llm_meta.get("response_id"))
+                    ctx.set_attr("system_prompt_hash", llm_meta.get("system_prompt_hash"))
+                    ctx.set_attr("user_prompt_hash", llm_meta.get("user_prompt_hash"))
+                    ctx.set_attr("status", llm_meta.get("status"))
+                    if llm_meta.get("service_tier"):
+                        ctx.set_attr("service_tier", llm_meta.get("service_tier"))
+
+                    # Set counts (numeric metrics)
                     ctx.set_count("patches_count", len(patches))
+                    ctx.set_count("input_tokens", llm_meta.get("input_tokens", 0))
+                    ctx.set_count("output_tokens", llm_meta.get("output_tokens", 0))
+                    ctx.set_count("total_tokens", llm_meta.get("total_tokens", 0))
+                    ctx.set_count("cached_tokens", llm_meta.get("cached_tokens", 0))
+                    ctx.set_count("reasoning_tokens", llm_meta.get("reasoning_tokens", 0))
                 except Exception as e:
                     logger.error("LLM inference failed: %s", e)
                     return {
