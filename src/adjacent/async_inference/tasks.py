@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
+from rq import get_current_job
 
 from adjacent.stores.neo4j_edge_store import Neo4jEdgeStore, Neo4jEdgeStoreConfig
 from adjacent.llm.edge_inference import EdgeInferenceService, EdgeInferenceConfig
@@ -80,11 +81,17 @@ def infer_edges(
         config = AsyncConfig()
 
     trace_id = generate_trace_id()
+
+    # Get current RQ job ID for provenance tracking
+    current_job = get_current_job()
+    job_id = current_job.id if current_job else None
+
     logger.info(
-        "Starting inference task: anchor=%s, candidates=%d (trace_id=%s)",
+        "Starting inference task: anchor=%s, candidates=%d (trace_id=%s, job_id=%s)",
         anchor_id,
         len(candidate_ids),
         trace_id,
+        job_id,
     )
 
     # Validate we have LLM credentials
@@ -234,10 +241,20 @@ def infer_edges(
                             (existing or {}).get("anchors_seen", []) or []
                         )
 
+                        # Compute provenance for new edges only
+                        created_kind = None
+                        if existing is None:
+                            if a == anchor_id or b == anchor_id:
+                                created_kind = "anchor_candidate"
+                            else:
+                                created_kind = "candidate_candidate"
+
                         full_edge = materializer.materialize(
                             patch=patch,
                             anchor_id=anchor_id,
                             existing_edge=existing,
+                            created_kind=created_kind,
+                            job_id=job_id,
                         )
 
                         edge_store.upsert_edge(full_edge)
@@ -258,6 +275,9 @@ def infer_edges(
 
                 ctx.set_count("edges_created", edges_created)
                 ctx.set_count("edges_reinforced", edges_reinforced)
+                ctx.set_count("anchor_edges_created", anchor_edges_created)
+                ctx.set_count("candidate_edges_created", candidate_edges_created)
+                ctx.set_count("edges_noop_existing", edges_noop_existing)
 
             # Update anchor's inference timestamp
             with span(
@@ -280,6 +300,9 @@ def infer_edges(
             total_ctx.set_count("patches_count", len(patches))
             total_ctx.set_count("edges_created", edges_created)
             total_ctx.set_count("edges_reinforced", edges_reinforced)
+            total_ctx.set_count("anchor_edges_created", anchor_edges_created)
+            total_ctx.set_count("candidate_edges_created", candidate_edges_created)
+            total_ctx.set_count("edges_noop_existing", edges_noop_existing)
 
             return {
                 "anchor_id": anchor_id,

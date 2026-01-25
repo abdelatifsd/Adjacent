@@ -156,6 +156,15 @@ class QueryService:
 
         return self._embedding_service.embed_query(text).embedding
 
+    def _increment_query_count(self, product_id: str) -> None:
+        """Increment total_query_count for an anchor product."""
+        cypher = """
+        MATCH (p:Product {id: $product_id})
+        SET p.total_query_count = coalesce(p.total_query_count, 0) + 1
+        """
+        with self._neo4j_ctx.driver.session() as session:
+            session.run(cypher, product_id=product_id)
+
     def query(
         self,
         product_id: str,
@@ -198,6 +207,12 @@ class QueryService:
                 anchor = self._fetch_product(product_id)
                 if not anchor:
                     raise ValueError(f"Product not found: {product_id}")
+
+            # Increment query count for this anchor
+            with span(
+                "increment_query_count", operation="query", trace_id=trace_id, logger=logger
+            ):
+                self._increment_query_count(product_id)
 
             recommendations: List[Recommendation] = []
             from_graph = 0

@@ -76,6 +76,22 @@
       "type": "object",
       "default": {},
       "description": "Edge-type-specific properties (must be flat: primitives or arrays of primitives)."
+    },
+
+    "created_kind": {
+      "type": "string",
+      "enum": ["anchor_candidate", "candidate_candidate"],
+      "description": "Provenance: was this edge first created between an anchor and a candidate, or between two candidates? Set once at creation time. Does not imply permanence (any node can later be an anchor)."
+    },
+
+    "created_under_anchor_id": {
+      "type": "string",
+      "description": "Provenance: the anchor product ID whose query triggered the initial creation of this edge."
+    },
+
+    "created_in_job_id": {
+      "type": "string",
+      "description": "Provenance: optional RQ job ID that created this edge (for tracing back to inference runs)."
     }
   }
 }

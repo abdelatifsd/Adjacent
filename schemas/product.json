@@ -86,6 +86,26 @@
           }
         ]
       }
+    },
+
+    "total_query_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Number of times this product has been queried as an anchor (incremented on each query, before inference decision)."
+    },
+
+    "last_inference_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of the most recent inference run for this anchor (set by workers after LLM call completes)."
+    },
+
+    "inference_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Number of times inference has been run for this anchor (incremented by workers after LLM call)."
     }
   }
 }

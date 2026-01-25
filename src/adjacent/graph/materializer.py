@@ -49,12 +49,16 @@ class EdgeMaterializer:
         patch: Dict[str, Any],
         anchor_id: str,
         existing_edge: Optional[Dict[str, Any]] = None,
+        created_kind: Optional[str] = None,
+        job_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Args:
             patch: single edge patch from LLM (edge_patch.json)
             anchor_id: product ID that triggered inference
             existing_edge: previously stored edge, if any
+            created_kind: "anchor_candidate" or "candidate_candidate" (only for new edges)
+            job_id: RQ job ID for provenance tracking (only for new edges)
 
         Returns:
             Fully materialized edge conforming to edge.json
@@ -93,5 +97,21 @@ class EdgeMaterializer:
             "notes": patch.get("notes"),
             "edge_props": patch.get("edge_props", {}),
         }
+
+        # Set provenance fields on new edges only (immutable after creation)
+        if existing_edge is None:
+            if created_kind:
+                edge["created_kind"] = created_kind
+            edge["created_under_anchor_id"] = anchor_id
+            if job_id:
+                edge["created_in_job_id"] = job_id
+        else:
+            # Preserve existing provenance on reinforcement
+            if "created_kind" in existing_edge:
+                edge["created_kind"] = existing_edge["created_kind"]
+            if "created_under_anchor_id" in existing_edge:
+                edge["created_under_anchor_id"] = existing_edge["created_under_anchor_id"]
+            if "created_in_job_id" in existing_edge:
+                edge["created_in_job_id"] = existing_edge["created_in_job_id"]
 
         return edge
