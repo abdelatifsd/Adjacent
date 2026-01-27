@@ -1,6 +1,14 @@
+<div align="center">
+  <img src="assets/brand/adjacent-logo.png" alt="Adjacent Logo" width="600">
+</div>
+
+<div align="center">
+
 # Adjacent
 
 > Cold-start product recommendations via lazy graph construction.
+
+</div>
 
 Adjacent is an open-source experimentation framework for building recommendation systems without behavioral data. It turns a raw product catalog into a semantic + graph-based recommendation engine by combining embeddings, LLM inference, and a lazily constructed knowledge graph.
 

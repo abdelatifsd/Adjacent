@@ -117,29 +117,42 @@ The Grafana dashboard ([adjacent-metrics](http://localhost:3000/d/adjacent-metri
 
 ## Common Operations
 
-### Start monitoring stack
+### Docker Compose (Integrated Setup)
+
+The monitoring stack is now integrated with the main application via `make dev`:
+
 ```bash
+# Start everything (app + monitoring)
+make dev
+
+# View all service logs
+make dev-logs
+
+# Check service health
+make dev-status
+
+# Stop everything (keeps volumes)
+make dev-down
+
+# Clean everything (removes volumes)
+make dev-clean
+```
+
+### Standalone Monitoring Stack (Legacy)
+
+For running monitoring independently:
+
+```bash
+# Start only monitoring stack
 make monitoring-up
-```
+# or
+docker compose up -d loki promtail grafana
 
-### Stop monitoring stack (preserves data)
-```bash
+# Stop monitoring stack (preserves data)
 make monitoring-down
-```
 
-### View real-time logs
-```bash
-make monitoring-logs
-```
-
-### Check health status
-```bash
-make monitoring-status
-```
-
-### Full reset (clears all data including metrics history)
-```bash
-make reset-full
+# View real-time logs
+docker compose logs -f loki promtail grafana
 ```
 
 ## Troubleshooting
@@ -151,6 +164,9 @@ make reset-full
 
 **Diagnosis:**
 ```bash
+# Check if services are running
+make dev-status
+
 # Check if logs are being written
 ls -lh logs/
 cat logs/api.log | grep '"span"' | head -5
@@ -159,7 +175,8 @@ cat logs/api.log | grep '"span"' | head -5
 curl -s 'http://localhost:3100/loki/api/v1/query?query={job="api"}' | jq '.data.result | length'
 
 # Check Loki handler status (look for errors in application logs)
-docker logs adjacent-api 2>&1 | grep -i loki
+docker compose logs api | grep -i loki
+docker compose logs worker | grep -i loki
 ```
 
 **Common Causes:**
@@ -167,17 +184,17 @@ docker logs adjacent-api 2>&1 | grep -i loki
 1. **Logs haven't been generated yet**
    - Solution: Make some API requests to generate logs
    ```bash
-   curl "http://localhost:8000/query/1?top_k=5"
+   curl "http://localhost:8000/v1/query/1?top_k=5"
    ```
 
-2. **Loki handler not enabled**
-   - Check `LOKI_ENABLED` environment variable (default: `true`)
-   - Solution: Ensure `LOKI_ENABLED=true` is set
+2. **Services not running**
+   - Check with: `docker compose ps`
+   - Solution: Start everything with `make dev`
 
-3. **Loki not reachable**
-   - Check if Loki is running: `docker ps | grep loki`
-   - Check if Loki URL is correct: `echo $LOKI_URL` (default: `http://localhost:3100/loki/api/v1/push`)
-   - Solution: Ensure monitoring stack is running: `make monitoring-up`
+3. **Loki not reachable from containers**
+   - In Docker Compose, services use `http://loki:3100` (not localhost)
+   - Check docker-compose.yml for correct LOKI_URL
+   - Solution: Ensure all services are on the same network: `docker network ls | grep adjacent`
 
 4. **Time range issue**
    - Grafana's time picker may not include your log timestamps

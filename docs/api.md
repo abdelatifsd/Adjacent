@@ -1,112 +1,115 @@
 # Adjacent API Reference
 
-> Minimal FastAPI server exposing QueryService querying and job status endpoints.
+> Minimal FastAPI server exposing QueryService querying, job status, and system health endpoints.
 
 The Adjacent API provides a thin HTTP layer over the core QueryService, enabling:
 - Low-latency recommendation queries
 - Performance monitoring
 - Async job status tracking
+- System health and status monitoring
 
 ---
 
 ## Quick Start
 
-### Prerequisites
-
-1. **Neo4j** running with indexed products
-2. **Redis** running for job queue
-3. **RQ worker** running to process inference jobs (if using async inference)
-
-### Installation
-
-Install FastAPI and Uvicorn (already added to `pyproject.toml`):
+### Docker Compose (Recommended)
 
 ```bash
-uv sync
+# First time setup
+./scripts/setup.sh
+
+# Add your OpenAI API key to .env
+echo "OPENAI_API_KEY=sk-your-key-here" >> .env
+
+# Start everything
+make dev
 ```
 
-### Required Environment Variables
+This starts:
+- Neo4j with indexed products
+- Redis for job queue
+- API server on port 8000
+- RQ worker for async inference
+- Monitoring stack (Grafana, Loki)
+
+**Access points:**
+- API: http://localhost:8000/docs
+- Grafana: http://localhost:3000 (admin/admin)
+- Neo4j: http://localhost:7475 (neo4j/adjacent123)
+
+### Environment Configuration
+
+The [.env](.env) file controls all configuration:
 
 ```bash
-# Neo4j connection
-export NEO4J_URI="bolt://localhost:7688"
-export NEO4J_USER="neo4j"
-export NEO4J_PASSWORD="adjacent123"
+# Required for async inference
+OPENAI_API_KEY=sk-your-key-here
 
-# Redis connection
-export REDIS_URL="redis://localhost:6379/0"
-
-# Embedding provider
-export EMBEDDING_PROVIDER="huggingface"  # or "openai"
-# export EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2"  # optional
-
-# LLM (optional, required for async inference)
-export OPENAI_API_KEY="sk-..."  # optional
-export LLM_MODEL="gpt-4o-mini"  # optional, defaults to gpt-4o-mini
+# Optional (defaults provided)
+NEO4J_URI=bolt://localhost:7688
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=adjacent123
+REDIS_URL=redis://localhost:6379/0
+EMBEDDING_PROVIDER=huggingface
+LLM_MODEL=gpt-4o-mini
 ```
 
 **Note:** If `OPENAI_API_KEY` is not set, async inference will be skipped automatically (inference_status will be "skipped").
 
 ---
 
-## Running the API Server
+## Running Components Separately (Advanced)
 
-### Development Mode
+### Native Python API Server
 
-```bash
-uvicorn adjacent.api.app:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Options:**
-- `--reload`: Auto-reload on code changes
-- `--host 0.0.0.0`: Listen on all network interfaces
-- `--port 8000`: Port to bind to
-
-### Production Mode
+For debugging or advanced development:
 
 ```bash
-uvicorn adjacent.api.app:app --host 0.0.0.0 --port 8000 --workers 4
+# Start infrastructure first
+make reset-full
+
+# Then start API
+make api-start
+# or
+uv run uvicorn adjacent.api.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Production considerations:**
-- Use multiple workers for concurrency
-- Each worker initializes its own Neo4j connection pool
-- Redis connection is shared via connection string
+### Native Python Worker
+
+```bash
+# In separate terminal
+make worker
+# or
+uv run rq worker adjacent_inference --url redis://localhost:6379/0 --with-scheduler
+```
+
+### Docker Compose (Individual Services)
+
+```bash
+# Start only infrastructure
+docker compose up -d neo4j redis
+
+# Start only API
+docker compose up -d api
+
+# Start only worker
+docker compose up -d worker
+
+# View logs
+docker compose logs -f api worker
+```
 
 ---
 
-## Running the Worker
+## API Endpoints Overview
 
-The worker processes async inference jobs enqueued by query endpoints.
-
-```bash
-rq worker adjacent_inference --url redis://localhost:6379/0
-```
-
-**Worker details:**
-- Queue name: `adjacent_inference` (defined in `AsyncConfig.queue_name`)
-- Task module: `adjacent.async_inference.tasks`
-- Job function: `infer_edges(anchor_id, candidate_ids, config_dict)`
-
-**Verify queue name:**
-
-If the worker isn't processing jobs, verify the queue name matches your config:
-
-```bash
-# Check queue status
-rq info --url redis://localhost:6379/0
-
-# Should show "adjacent_inference" queue
-```
-
-**Environment for worker:**
-
-The worker needs the same environment variables as the API server:
-- `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
-- `OPENAI_API_KEY` (required for inference)
-- `LLM_MODEL` (optional)
-
-The config is also serialized in the job payload as a fallback.
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Simple health check |
+| `/v1/query/{product_id}` | GET | Get recommendations for a product |
+| `/v1/perf/query/{product_id}` | GET | Get recommendations with timing metrics |
+| `/v1/jobs/{job_id}` | GET | Check async inference job status |
+| `/v1/system/status` | GET | Get comprehensive system health and metrics |
 
 ---
 
@@ -325,9 +328,12 @@ Get status of an async inference job.
   "job_id": "abc-123-def-456",
   "status": "finished",
   "result": {
-    "edges_created": 3,
+    "anchor_id": "product_123",
+    "edges_created": 5,
+    "anchor_edges_created": 3,
+    "candidate_edges_created": 2,
     "edges_reinforced": 2,
-    "total_edges": 5
+    "edges_noop_existing": 1
   },
   "error": null
 }
@@ -343,12 +349,26 @@ Get status of an async inference job.
 | `failed` | Job failed with error |
 | `not_found` | Job ID does not exist |
 
-**Result Field:**
+**Result Fields:**
 
 The `result` field contains the return value from the `infer_edges` task:
-- `edges_created`: Number of new edges created
-- `edges_reinforced`: Number of existing edges reinforced
-- `total_edges`: Total edges processed
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `anchor_id` | string | The anchor product ID that was processed |
+| `edges_created` | integer | Total number of new edges created |
+| `anchor_edges_created` | integer | New edges connecting anchor to candidates |
+| `candidate_edges_created` | integer | New edges between candidates (candidate-candidate) |
+| `edges_reinforced` | integer | Existing edges where anchor was newly added to `anchors_seen` |
+| `edges_noop_existing` | integer | Existing edges where anchor was already in `anchors_seen` |
+
+**Understanding Edge Counts:**
+
+- **Created** edges are brand new relationships discovered by the LLM
+  - `anchor_edges_created`: Direct anchor → candidate connections
+  - `candidate_edges_created`: Candidate → candidate connections (secondary relationships)
+- **Reinforced** edges existed but gain this anchor as a new observer (increases confidence)
+- **No-op** edges existed and this anchor already observed them (no change)
 
 **Examples:**
 
@@ -374,6 +394,124 @@ done
   "error": "No such job: invalid-id"
 }
 ```
+
+---
+
+### GET /v1/system/status
+
+Get comprehensive system health and status information.
+
+**Description:**
+
+Fast, read-only endpoint that provides a snapshot of system health, including:
+- Neo4j connectivity and database stats
+- Vector index status
+- Redis/RQ connectivity and queue status
+- Graph coverage metrics
+- System dynamics information
+
+This endpoint degrades gracefully - Redis unavailability doesn't fail the request, but Neo4j is required (returns 503 if unreachable).
+
+**Parameters:**
+
+None.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "neo4j": {
+    "connected": true,
+    "product_count": 1000,
+    "inferred_edge_count": 2450,
+    "vector_index": {
+      "present": true,
+      "state": "ONLINE",
+      "name": "product_embedding"
+    }
+  },
+  "inference": {
+    "redis_connected": true,
+    "queue_enabled": true,
+    "queue_name": "adjacent_inference",
+    "pending_jobs": 3
+  },
+  "dynamics": {
+    "graph_coverage_pct": 45.2,
+    "notes": [
+      "Cold start is expected: vector recommendations dominate until async inference creates edges.",
+      "Inferred edges and graph coverage increase over time as the worker runs."
+    ]
+  }
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | Overall system status ("ok") |
+| `neo4j.connected` | boolean | Neo4j connectivity status |
+| `neo4j.product_count` | integer | Total number of products in database |
+| `neo4j.inferred_edge_count` | integer | Total number of RECOMMENDATION edges |
+| `neo4j.vector_index.present` | boolean | Whether vector index exists |
+| `neo4j.vector_index.state` | string or null | Index state ("ONLINE", "FAILED", etc.) |
+| `neo4j.vector_index.name` | string or null | Index name |
+| `inference.redis_connected` | boolean | Redis connectivity status |
+| `inference.queue_enabled` | boolean | Whether job queue is operational |
+| `inference.queue_name` | string | RQ queue name |
+| `inference.pending_jobs` | integer or null | Number of jobs waiting in queue |
+| `dynamics.graph_coverage_pct` | float or null | Percentage of products with inferred edges |
+| `dynamics.notes` | array | Informational notes about system behavior |
+
+**Use Cases:**
+
+1. **Health Checks:** Used by Docker healthcheck to verify API is ready
+2. **Monitoring:** Check system health without making actual queries
+3. **Debugging:** Understand why system may be in cold start or degraded state
+4. **Dashboard:** Display system metrics in monitoring tools
+
+**Examples:**
+
+```bash
+# Basic status check
+curl http://localhost:8000/v1/system/status | jq
+
+# Check if ready (exit 0 if ok)
+curl -f http://localhost:8000/v1/system/status > /dev/null 2>&1 && echo "System ready"
+
+# Get specific metrics
+curl -s http://localhost:8000/v1/system/status | jq '.neo4j.inferred_edge_count'
+curl -s http://localhost:8000/v1/system/status | jq '.dynamics.graph_coverage_pct'
+```
+
+**Error Response:**
+
+```json
+// Neo4j unavailable (503)
+{
+  "error": "Neo4j unavailable",
+  "error_type": "neo4j_unavailable"
+}
+```
+
+**Interpreting Results:**
+
+| Condition | Meaning | Action |
+|-----------|---------|--------|
+| `graph_coverage_pct < 10%` | Cold start, few products have edges | Normal - wait for worker to process queries |
+| `graph_coverage_pct > 80%` | Mature graph, most products connected | Good - system is well-trained |
+| `inferred_edge_count = 0` | No edges created yet | Make queries to trigger inference |
+| `pending_jobs > 100` | Worker may be overloaded or slow | Check worker logs, consider scaling |
+| `redis_connected = false` | Queue unavailable | Queries work but no async inference |
+| `vector_index.present = false` | No vector index | Embedding not set up, run `make embed` |
+
+**Performance:**
+
+- Very fast (< 50ms typical)
+- Read-only queries
+- Safe to call frequently for monitoring
 
 ---
 
@@ -447,15 +585,28 @@ Every API request includes a `trace_id` in the response. This ID:
 
 Before deploying to production:
 
-- [ ] Set all required environment variables
+### Using Docker Compose (Recommended)
+
+- [ ] Clone repository and run `./scripts/setup.sh`
+- [ ] Add `OPENAI_API_KEY` to `.env` file
+- [ ] Run `make dev` to start all services
+- [ ] Verify all services are healthy: `make dev-status`
+- [ ] Test a sample query: `curl http://localhost:8000/v1/query/1`
+- [ ] Check Grafana dashboard: http://localhost:3000
+- [ ] Monitor logs: `make dev-logs`
+
+### Using Native Setup (Advanced)
+
+- [ ] Set all required environment variables in `.env`
 - [ ] Start Neo4j with indexed products and vector index
 - [ ] Start Redis
+- [ ] Run data pipeline: `make ingest && make embed`
 - [ ] Start RQ worker(s) for async inference
 - [ ] Start API server with multiple workers (`--workers 4`)
 - [ ] Verify `/health` endpoint responds
 - [ ] Test a sample query with `/v1/query/{product_id}`
 - [ ] Check worker logs to ensure jobs are processed
-- [ ] Monitor metrics via JSONL events (see `docs/metrics.md`)
+- [ ] Monitor metrics via Grafana or JSONL events
 
 ---
 
@@ -543,22 +694,24 @@ async def lifespan(app: FastAPI):
 - Server crashes on startup with `RuntimeError: API startup failed`
 
 **Check:**
-1. Neo4j is running and accessible at `NEO4J_URI`
-2. Redis is running and accessible at `REDIS_URL`
-3. Environment variables are set correctly
+1. Neo4j is running and accessible
+2. Redis is running and accessible
+3. Environment variables are set correctly in `.env`
 4. Check API logs for specific connection errors
 
 **Fix:**
 ```bash
-# Verify Neo4j is running
-docker ps | grep neo4j
+# Check service status
+make dev-status
 
-# Verify Redis is running
-redis-cli ping  # Should return PONG
+# View API logs
+docker compose logs api
 
-# Check connection strings
-echo $NEO4J_URI
-echo $REDIS_URL
+# Verify services are running
+docker compose ps
+
+# Restart API
+docker compose restart api
 ```
 
 ### API Returns 503 (Service Unavailable)
@@ -594,10 +747,22 @@ echo $REDIS_URL
 ### Worker Not Processing Jobs
 
 **Check:**
-1. Worker is running (`rq worker adjacent_inference`)
-2. Worker is connected to the same Redis instance as API
-3. Worker logs for errors
-4. Redis queue status: `rq info --url redis://localhost:6379/0`
+1. Worker is running: `docker compose ps worker`
+2. Worker logs for errors: `docker compose logs worker`
+3. Worker is connected to Redis properly
+4. Job queue status in worker logs
+
+**Fix:**
+```bash
+# Restart worker
+docker compose restart worker
+
+# View worker logs in real-time
+docker compose logs -f worker
+
+# Check Redis connectivity
+docker compose exec worker redis-cli -h redis ping
+```
 
 ### Slow Query Performance
 

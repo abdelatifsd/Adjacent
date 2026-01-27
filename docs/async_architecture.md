@@ -86,17 +86,37 @@ def infer_edges(
     anchor_id: str,
     candidate_ids: List[str],
     config_dict: Optional[Dict[str, Any]] = None,
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Returns:
         {
             "anchor_id": "...",
-            "edges_created": 5,
-            "edges_reinforced": 2,
-            "error": None  # or error message
+            "edges_created": 5,                    # Total new edges created
+            "anchor_edges_created": 3,             # Edges connecting anchor to candidates
+            "candidate_edges_created": 2,          # Edges between candidates
+            "edges_reinforced": 2,                 # Existing edges newly seen by this anchor
+            "edges_noop_existing": 1,              # Edges already seen by this anchor
+            "error": None  # or error message if failed
         }
     """
 ```
+
+**Return Fields Explained:**
+
+| Field | Description |
+|-------|-------------|
+| `edges_created` | Total number of new edges created (sum of anchor + candidate edges) |
+| `anchor_edges_created` | New edges connecting anchor to candidates |
+| `candidate_edges_created` | New edges between candidates (candidate-candidate relationships) |
+| `edges_reinforced` | Existing edges where this anchor was added to `anchors_seen` |
+| `edges_noop_existing` | Existing edges where this anchor was already in `anchors_seen` |
+| `error` | Error message if inference failed, null otherwise |
+
+**Edge Lifecycle:**
+1. **Created** - Edge doesn't exist, LLM suggests it
+2. **Reinforced** - Edge exists, but this anchor hasn't seen it before (strengthens confidence)
+3. **No-op** - Edge exists and this anchor already observed it (no change)
 
 ### 3. Configuration (`src/adjacent/async_inference/config.py`)
 
@@ -108,45 +128,83 @@ class AsyncConfig:
     # Redis
     redis_url: str = "redis://localhost:6379/0"
     queue_name: str = "adjacent_inference"
-    
+
     # Neo4j
     neo4j_uri: str = "bolt://localhost:7688"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "adjacent123"
-    
+
+    # Embedding
+    embedding_provider: str = "huggingface"
+    embedding_model: Optional[str] = None
+
     # LLM
     openai_api_key: Optional[str] = None
     llm_model: str = "gpt-4o-mini"
-    
-    # ...
+
+    # Query settings
+    top_k_candidates: int = 10
+    max_recommendations: int = 10
+
+    # Worker settings
+    job_timeout: int = 300  # 5 minutes max per job
+
+    # Endpoint reinforcement settings
+    allow_endpoint_reinforcement: bool = True
+    endpoint_reinforcement_threshold: int = 5
+    endpoint_reinforcement_max_confidence: float = 0.70
 ```
+
+**Key Configuration Options:**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `embedding_provider` | `"huggingface"` | Embedding provider (huggingface or openai) |
+| `top_k_candidates` | `10` | Number of candidates to consider for inference |
+| `allow_endpoint_reinforcement` | `True` | Enable reinforcement for low-confidence edges |
+| `endpoint_reinforcement_threshold` | `5` | Only reinforce if `anchors_seen` count < this |
+| `endpoint_reinforcement_max_confidence` | `0.70` | Don't reinforce if confidence >= this |
+
+**Endpoint Reinforcement:**
+When enabled, the system will re-infer edges for endpoints (candidates) that have low observation counts or confidence. This helps strengthen weak edges and improve recommendation quality over time.
 
 ## Running
 
-### Start Infrastructure
+### Docker Compose (Recommended)
 
 ```bash
-# Start Redis (via Docker)
-make redis-start
-
-# Start Neo4j (if not running)
-make neo4j-start
+# Start everything (Neo4j, Redis, API, Worker, Monitoring)
+make dev
 ```
 
-### Start Worker
+This single command:
+- Starts all infrastructure (Neo4j, Redis)
+- Ingests demo data and embeds products
+- Starts API server and RQ worker
+- Starts monitoring stack (Grafana, Loki)
+
+### Native Python (Advanced)
+
+For debugging or development with more control:
 
 ```bash
-# In a separate terminal
+# Terminal 1: Infrastructure
+make reset-full
+
+# Terminal 2: API server
+make api-start
+
+# Terminal 3: Worker
 make worker
 ```
 
-This starts an RQ worker listening on the `adjacent_inference` queue.
+The worker listens on the `adjacent_inference` queue and processes inference tasks.
 
 ### Query with Async Inference
 
 ```bash
-# Via Makefile
-make query-async PRODUCT_ID=your_product_id
+# Via API (after running 'make dev')
+curl http://localhost:8000/v1/query/your_product_id | jq
 
 # Or programmatically
 from adjacent.async_inference import QueryService, AsyncConfig
@@ -156,15 +214,17 @@ with QueryService(config) as svc:
     result = svc.query("product_id")
 ```
 
-### Monitor Queue
+### Monitor Services
 
 ```bash
-# Queue status
-make queue-status
+# View all service logs
+make dev-logs
 
-# Dashboard (requires: pip install rq-dashboard)
-make worker-dashboard
-# Opens http://localhost:9181
+# Check service health
+make dev-status
+
+# View Grafana dashboard
+open http://localhost:3000  # admin/admin
 ```
 
 ## Comparison
@@ -211,7 +271,26 @@ Check job status programmatically:
 
 ```python
 status = svc.get_job_status(result.job_id)
-# {"job_id": "...", "status": "finished", "result": {...}}
+# Returns:
+# {
+#     "job_id": "abc-123",
+#     "status": "finished",
+#     "result": {
+#         "anchor_id": "product_123",
+#         "edges_created": 5,
+#         "anchor_edges_created": 3,
+#         "candidate_edges_created": 2,
+#         "edges_reinforced": 2,
+#         "edges_noop_existing": 1
+#     },
+#     "error": None
+# }
+```
+
+Or via the API:
+
+```bash
+curl http://localhost:8000/v1/jobs/abc-123 | jq
 ```
 
 ## Future Enhancements
