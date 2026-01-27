@@ -1,12 +1,5 @@
 <div align="center">
 
-# Adjacent
-
-**Cold-start product recommendations via lazy graph construction**
-
-A lightweight, open-source experimentation framework for generating
-high-quality product recommendations *without behavioral data*.
-
 <img src="assets/brand/adjacent-logo.png" alt="Adjacent Logo" width="420">
 
 </div>
