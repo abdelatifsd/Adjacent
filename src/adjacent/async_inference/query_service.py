@@ -210,7 +210,10 @@ class QueryService:
 
             # Increment query count for this anchor
             with span(
-                "increment_query_count", operation="query", trace_id=trace_id, logger=logger
+                "increment_query_count",
+                operation="query",
+                trace_id=trace_id,
+                logger=logger,
             ):
                 self._increment_query_count(product_id)
 

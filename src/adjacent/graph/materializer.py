@@ -110,7 +110,9 @@ class EdgeMaterializer:
             if "created_kind" in existing_edge:
                 edge["created_kind"] = existing_edge["created_kind"]
             if "created_under_anchor_id" in existing_edge:
-                edge["created_under_anchor_id"] = existing_edge["created_under_anchor_id"]
+                edge["created_under_anchor_id"] = existing_edge[
+                    "created_under_anchor_id"
+                ]
             if "created_in_job_id" in existing_edge:
                 edge["created_in_job_id"] = existing_edge["created_in_job_id"]
 

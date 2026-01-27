@@ -60,14 +60,17 @@ if not logging.getLogger().handlers:
         loki_handler = LokiHandler(
             url=os.getenv("LOKI_URL", "http://localhost:3100/loki/api/v1/push"),
             job="worker",
-            enabled=os.getenv("LOKI_ENABLED", "true").lower() in ("true", "1", "yes", "on"),
+            enabled=os.getenv("LOKI_ENABLED", "true").lower()
+            in ("true", "1", "yes", "on"),
         )
         loki_handler.setFormatter(logging.Formatter("%(message)s"))  # Clean JSON only
         metrics_logger.addHandler(loki_handler)
 
         # Also keep file handler for metrics (with clean format)
         metrics_file_handler = logging.FileHandler(log_file, mode="a")
-        metrics_file_handler.setFormatter(logging.Formatter("%(message)s"))  # Clean JSON
+        metrics_file_handler.setFormatter(
+            logging.Formatter("%(message)s")
+        )  # Clean JSON
         metrics_file_handler.setLevel(logging.INFO)
         metrics_logger.addHandler(metrics_file_handler)
 
