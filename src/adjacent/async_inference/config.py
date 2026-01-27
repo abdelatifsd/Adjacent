@@ -55,7 +55,7 @@ class AsyncConfig:
     # Endpoint reinforcement settings
     allow_endpoint_reinforcement: bool = True  # Enable endpoint reinforcement
     endpoint_reinforcement_threshold: int = (
-        2  # Only reinforce if anchors_seen count < this value
+        5  # Only reinforce if anchors_seen count < this value
     )
     endpoint_reinforcement_max_confidence: float = (
         0.70  # Don't reinforce if confidence >= this

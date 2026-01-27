@@ -1,5 +1,106 @@
 services:
   # ===========================================
+  # Infrastructure Services
+  # ===========================================
+
+  neo4j:
+    image: neo4j:5
+    container_name: adjacent-neo4j
+    ports:
+      - "7475:7474"  # HTTP
+      - "7688:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/adjacent123
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "adjacent123", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: adjacent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ===========================================
+  # Application Services
+  # ===========================================
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: adjacent-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app/src
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=adjacent123
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      # Mount source for hot reload (needs write for .pyc files)
+      - ./src:/app/src
+      - ./schemas:/app/schemas
+      # Use :consistent for better macOS Docker Desktop performance
+      - ./logs:/app/logs:consistent
+    command: uv run uvicorn adjacent.api.app:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: adjacent-worker
+    environment:
+      - PYTHONPATH=/app/src
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=adjacent123
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NO_COLOR=1
+      - OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+    volumes:
+      # Mount source for hot reload (needs write for .pyc files)
+      - ./src:/app/src
+      - ./schemas:/app/schemas
+      # Use :consistent for better macOS Docker Desktop performance
+      - ./logs:/app/logs:consistent
+    command: uv run rq worker adjacent_inference --url redis://redis:6379/0 --with-scheduler
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ===========================================
   # Monitoring Stack (Grafana + Loki + Promtail)
   # ===========================================
 
@@ -42,6 +143,22 @@ services:
       - loki
     restart: unless-stopped
 
+# ===========================================
+# Named Volumes (prevents leaks)
+# ===========================================
 volumes:
+  neo4j-data:
+    name: adjacent-neo4j-data
+  redis-data:
+    name: adjacent-redis-data
   loki-data:
+    name: adjacent-loki-data
   grafana-data:
+    name: adjacent-grafana-data
+
+# ===========================================
+# Network (all services on same network)
+# ===========================================
+networks:
+  default:
+    name: adjacent-network

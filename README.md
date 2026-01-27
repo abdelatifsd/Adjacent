@@ -4,7 +4,100 @@
 
 Adjacent is an open-source experimentation framework for building recommendation systems without behavioral data. It turns a raw product catalog into a semantic + graph-based recommendation engine by combining embeddings, LLM inference, and a lazily constructed knowledge graph.
 
-This project is intentionally scoped as a research-grade prototype: the goal is clarity, correctness, and extensibility — not premature optimization or UI polish.
+This project is intentionally scoped as a research-grade prototype: the goal is clarity, correctness, and extensibility, not premature optimization or UI polish.
+
+---
+
+## Quick Start
+
+Get Adjacent running in 5 minutes:
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) (with Docker Compose)
+- [uv](https://docs.astral.sh/uv/) - Fast Python package manager
+- Python 3.11+
+- OpenAI API key (for LLM inference)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone <repo-url>
+cd adjacent
+
+# Run setup script (installs dependencies, creates .env)
+./scripts/setup.sh
+
+# Add your OpenAI API key to .env
+echo "OPENAI_API_KEY=sk-your-key-here" >> .env
+
+# Start everything
+make dev
+```
+
+That's it! The system will:
+1. Start infrastructure (Neo4j, Redis, Grafana, Loki)
+2. Ingest demo e-commerce data
+3. Embed products using HuggingFace
+4. Start API server and worker
+
+### Access Points
+
+- **API Documentation:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Grafana Dashboard:** [http://localhost:3000](http://localhost:3000) (admin/admin)
+- **Neo4j Browser:** [http://localhost:7475](http://localhost:7475) (neo4j/adjacent123)
+
+### Quick Commands
+
+```bash
+make dev           # Start everything
+make dev-logs      # View logs
+make dev-status    # Check service health
+make dev-down      # Stop all services
+make dev-clean     # Clean everything (removes volumes)
+```
+
+### First Query
+
+```bash
+# Check system status
+curl http://localhost:8000/v1/system/status | jq
+
+# Get recommendations for a product
+curl http://localhost:8000/v1/query/<product_id>?top_k=10 | jq
+```
+
+See [docs/system_dynamics.md](docs/system_dynamics.md) for understanding cold start behavior and system evolution.
+
+### Development Workflow
+
+The `make dev` command runs everything in Docker with hot reload enabled. Changes to Python files in `src/` are automatically picked up.
+
+**For advanced development** (native Python with separate terminals):
+
+```bash
+# Terminal 1: Start infrastructure
+make reset-full
+
+# Terminal 2: Start API
+make api-start
+
+# Terminal 3: Start worker
+make worker
+```
+
+This gives you more control and better debugging visibility, but requires managing multiple processes.
+
+**Testing different embedding providers:**
+
+```bash
+# Use HuggingFace (default, runs locally)
+make embed
+
+# Use OpenAI embeddings (requires OPENAI_API_KEY in .env)
+make embed-openai
+```
 
 ---
 

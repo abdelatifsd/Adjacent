@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project data (not needed in container)
+neo4j-data/
+data/generated/
+data/raw/
+logs/*.log
+*.jsonl
+
+# Documentation (keep README.md for build)
+docs/
+SETUP_GUIDE.md
+CONTRIBUTING.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# CI/CD
+.github/
+
+# Environment (will be set via compose)
+.env
+.env.local
+.env.*.local

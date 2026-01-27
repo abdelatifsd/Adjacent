@@ -1,11 +1,101 @@
-.PHONY: tree validate setup test clean monitoring-up monitoring-down monitoring-logs reset reset-full
+.PHONY: tree validate setup test clean monitoring-up monitoring-down monitoring-logs reset reset-full dev dev-build dev-up dev-down dev-logs dev-status dev-clean
 
 # Use 'uv run' to ensure the environment is synced and used correctly
 PYTHON := uv run python
 CHECK_JSONSCHEMA := uv run check-jsonschema
 
+# ===========================================
+# Development Commands (Docker Compose)
+# ===========================================
+
+# Start everything (recommended for development)
+dev:
+	@echo "🚀 Starting Adjacent development environment..."
+	@$(MAKE) dev-down 2>/dev/null || true
+	@$(MAKE) dev-clean-logs
+	@docker compose up -d neo4j redis loki promtail grafana
+	@echo "⏳ Waiting for infrastructure to be ready..."
+	@sleep 15
+	@echo "📊 Ingesting demo data..."
+	@$(MAKE) ingest
+	@echo "🔢 Embedding products..."
+	@$(MAKE) embed
+	@echo "🚀 Starting API and Worker..."
+	@docker compose up -d api worker
+	@echo ""
+	@echo "============================================"
+	@echo "✓ Adjacent is ready!"
+	@echo "============================================"
+	@echo ""
+	@echo "Services:"
+	@echo "  • API:      http://localhost:8000/docs"
+	@echo "  • Grafana:  http://localhost:3000 (admin/admin)"
+	@echo "  • Neo4j:    http://localhost:7475 (neo4j/adjacent123)"
+	@echo ""
+	@echo "Useful commands:"
+	@echo "  make dev-logs    # View logs"
+	@echo "  make dev-status  # Check service health"
+	@echo "  make dev-down    # Stop all services"
+	@echo ""
+
+# Build Docker images
+dev-build:
+	@echo "🔨 Building Docker images..."
+	@docker compose build
+
+# Start all services (without reset)
+dev-up:
+	@echo "🚀 Starting all services..."
+	@docker compose up -d
+	@echo "✓ Services started"
+
+# Stop all services (keeps volumes)
+dev-down:
+	@echo "🛑 Stopping all services..."
+	@docker compose down
+	@echo "✓ Services stopped"
+
+# View logs from all services
+dev-logs:
+	@docker compose logs -f
+
+# Check status of all services
+dev-status:
+	@echo "============================================"
+	@echo "Service Status"
+	@echo "============================================"
+	@docker compose ps
+	@echo ""
+	@echo "API Health Check:"
+	@curl -s http://localhost:8000/v1/system/status | jq -r '.status' 2>/dev/null || echo "  ❌ API not responding"
+	@echo ""
+	@echo "Neo4j Status:"
+	@docker exec adjacent-neo4j cypher-shell -u neo4j -p adjacent123 "RETURN 'connected' as status" 2>/dev/null | grep connected > /dev/null && echo "  ✓ Connected" || echo "  ❌ Not connected"
+
+# Clean everything (stops services and removes volumes)
+dev-clean:
+	@echo "🧹 Cleaning all services and volumes..."
+	@docker compose down -v
+	@rm -rf neo4j-data
+	@$(MAKE) dev-clean-logs
+	@echo "✓ Cleanup complete"
+
+# Clean logs
+dev-clean-logs:
+	@echo "🧹 Cleaning logs..."
+	@rm -f logs/api.log logs/worker.log
+
+# ===========================================
+# Local Setup (for native Python development)
+# ===========================================
+
 setup:
 	uv sync
+
+# ===========================================
+# Legacy Commands (for native Python workflow)
+# ===========================================
+# Use 'make dev' instead for Docker Compose workflow
 
 reset:
 	@echo "Resetting all data and containers..."
@@ -35,8 +125,8 @@ reset-full:
 	@pkill -f "uvicorn adjacent.api.app" 2>/dev/null || echo "  (no API process running)"
 	@echo "Stopping RQ worker..."
 	@pkill -f "rq worker adjacent_inference" 2>/dev/null || echo "  (no worker process running)"
-	@echo "Stopping monitoring stack..."
-	@docker compose down -v 2>/dev/null || echo "  (monitoring stack not running)"
+	@echo "Stopping Docker services..."
+	@docker compose down -v 2>/dev/null || echo "  (no Docker services running)"
 	@echo "Waiting for processes to terminate..."
 	@sleep 2
 	@echo ""
@@ -67,7 +157,11 @@ reset-full:
 tree:
 	tree -L 5 -I '.git|.venv|__pycache__'
 
-# In your NEW project Makefile
+# ===========================================
+# Legacy: Infrastructure Commands
+# ===========================================
+# Note: Use 'make dev' instead
+
 neo4j-start:
 	@echo "Starting Neo4j for adjacent"
 	@docker run -d \
@@ -84,9 +178,11 @@ format:
 	@uv run ruff format .
 
 
-# ----------------------------
-# Ingestion
-# ----------------------------
+# ===========================================
+# Data Pipeline (works with both Docker and native)
+# ===========================================
+
+# Ingest demo data into Neo4j
 ingest:
 	@echo "Ingesting demo data into Neo4j..."
 	$(PYTHON) -m src.adjacent.graph.ingest \
@@ -94,12 +190,9 @@ ingest:
 		--schema schemas/product.json \
 		--neo4j-uri bolt://localhost:7688 \
 		--neo4j-user neo4j \
-		--neo4j-password adjacent123 
+		--neo4j-password adjacent123
 
-# ----------------------------
-# Embedding Pipeline
-# ----------------------------
-
+# Embed products using HuggingFace (default, no API key needed)
 embed:
 	@echo "Embedding ALL products in Neo4j..."
 	PYTHONPATH=src $(PYTHON) -m adjacent.graph.embed \
@@ -118,9 +211,12 @@ embed-openai:
 		--neo4j-user neo4j \
 		--neo4j-password adjacent123
 
-# ----------------------------
-# FastAPI Server
-# ----------------------------
+# ===========================================
+# Legacy: Native API/Worker Commands
+# ===========================================
+# Note: Use 'make dev' instead for Docker Compose workflow
+
+# Start API server natively (for advanced development)
 api-start:
 	@echo "Starting Adjacent API server at http://localhost:8000"
 	@echo "Interactive docs available at:"
@@ -135,9 +231,6 @@ api-start:
 		PYTHONPATH=src uv run uvicorn adjacent.api.app:app --reload --host 0.0.0.0 --port 8000; \
 	fi
 
-# ----------------------------
-# Async Infrastructure (Redis + RQ)
-# ----------------------------
 redis-start:
 	@echo "Starting Redis for async inference queue"
 	@docker run --name adjacent-redis -p 6379:6379 -d redis:7-alpine || docker start adjacent-redis
@@ -145,7 +238,7 @@ redis-start:
 redis-stop:
 	@docker stop adjacent-redis || true
 
-# Start the RQ worker (processes inference tasks)
+# Start RQ worker natively (for advanced development)
 worker:
 	@echo "Starting RQ worker for inference tasks..."
 	@if [ -f .env ]; then \
@@ -167,13 +260,16 @@ worker-dashboard:
 	uv run rq-dashboard --redis-url redis://localhost:6379/0
 
 
-# ----------------------------
-# Monitoring (Grafana + Loki)
-# ----------------------------
+# ===========================================
+# Legacy: Monitoring Commands
+# ===========================================
+# Note: Monitoring is now part of 'make dev'
+# Use 'make dev-logs' to view logs
+
 monitoring-up:
 	@echo "Starting monitoring stack (Grafana + Loki + Promtail)..."
 	@mkdir -p logs
-	@docker compose up -d
+	@docker compose up -d loki promtail grafana
 	@echo ""
 	@echo "Monitoring services started:"
 	@echo "  - Grafana:  http://localhost:3000 (admin/admin)"
