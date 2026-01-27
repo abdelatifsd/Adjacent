@@ -19,12 +19,13 @@ from adjacent.async_inference.config import AsyncConfig
 from adjacent.async_inference.query_service import QueryService
 from adjacent.api.routes import router
 
-# Configure logging to both console and file
+# Configure logging to console, file, and Loki
 log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
 log_file = log_dir / "api.log"
 
-handlers = [
+# Root logger for general application logs (with prefix format)
+root_handlers = [
     logging.StreamHandler(sys.stdout),  # Console output
     logging.FileHandler(log_file, mode="a"),  # File output
 ]
@@ -32,8 +33,46 @@ handlers = [
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=handlers,
+    handlers=root_handlers,
 )
+
+# Configure "adjacent" logger for metrics (clean JSON format, direct to Loki)
+# This logger is used by commons.metrics for structured metrics
+try:
+    from commons.loki_handler import LokiHandler
+
+    metrics_logger = logging.getLogger("adjacent")
+    metrics_logger.setLevel(logging.INFO)
+    metrics_logger.propagate = False  # Don't propagate to root (avoid duplicate)
+
+    # Loki handler for direct push (clean JSON, no prefix)
+    loki_handler = LokiHandler(
+        url=os.getenv("LOKI_URL", "http://localhost:3100/loki/api/v1/push"),
+        job="api",
+        enabled=os.getenv("LOKI_ENABLED", "true").lower() in ("true", "1", "yes", "on"),
+    )
+    loki_handler.setFormatter(logging.Formatter("%(message)s"))  # Clean JSON only
+    metrics_logger.addHandler(loki_handler)
+
+    # Also keep file handler for metrics (with clean format)
+    metrics_file_handler = logging.FileHandler(log_file, mode="a")
+    metrics_file_handler.setFormatter(logging.Formatter("%(message)s"))  # Clean JSON
+    metrics_file_handler.setLevel(logging.INFO)
+    metrics_logger.addHandler(metrics_file_handler)
+
+except ImportError:
+    # Loki handler not available (requests not installed)
+    import sys
+
+    print(
+        "Warning: Loki handler not available. Install requests: pip install requests",
+        file=sys.stderr,
+    )
+except Exception as e:
+    # If Loki handler fails, continue without it
+    import sys
+
+    print(f"Warning: Failed to configure Loki handler: {e}", file=sys.stderr)
 
 logger = logging.getLogger(__name__)
 

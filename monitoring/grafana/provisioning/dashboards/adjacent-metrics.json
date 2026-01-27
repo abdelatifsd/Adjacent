@@ -84,7 +84,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "avg_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | regexp `(?P<json_data>{.*})` | line_format \"{{.json_data}}\" | json | unwrap duration_ms [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap duration_ms [$__range])",
           "instant": true,
           "legendFormat": "",
           "queryType": "instant",
@@ -163,7 +163,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "avg_over_time({job=\"worker\"} |~ `\"span\":\"llm_call\"` | regexp `(?P<json_data>{.*})` | line_format \"{{.json_data}}\" | json | unwrap duration_ms [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"worker\"} |~ `\"span\":\"llm_call\"` | json | unwrap duration_ms [$__range])",
           "instant": true,
           "legendFormat": "",
           "queryType": "instant",
@@ -200,8 +200,8 @@
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": true,
+            "showPoints": "auto",
+            "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
             "thresholdsStyle": { "mode": "off" }
           },
@@ -209,20 +209,64 @@
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "ms"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "event_type" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "span" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "operation" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "trace_id" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "counts" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "attrs" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "timestamp" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "schema_version" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "status" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value" },
+            "properties": [
+              { "id": "displayName", "value": "Latency" },
+              { "id": "custom.hideFrom", "value": { "tooltip": false, "viz": false, "legend": true } }
+            ]
+          }
+        ]
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "id": 5,
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": [], "displayMode": "hidden", "placement": "bottom", "showLegend": false },
         "tooltip": { "mode": "single", "sort": "none" }
       },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "avg_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | regexp `(?P<json_data>{.*})` | line_format \"{{.json_data}}\" | json | unwrap duration_ms [$__interval])",
-          "legendFormat": "Query Latency",
+          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap duration_ms [1m])",
+          "legendFormat": "{{Value}} ms",
           "queryType": "range",
           "refId": "A"
         }
@@ -249,8 +293,8 @@
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": true,
+            "showPoints": "auto",
+            "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
             "thresholdsStyle": { "mode": "off" }
           },
@@ -258,20 +302,64 @@
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "ms"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "event_type" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "span" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "operation" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "trace_id" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "counts" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "attrs" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "timestamp" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "schema_version" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "status" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value" },
+            "properties": [
+              { "id": "displayName", "value": "Latency" },
+              { "id": "custom.hideFrom", "value": { "tooltip": false, "viz": false, "legend": true } }
+            ]
+          }
+        ]
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "id": 6,
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": [], "displayMode": "hidden", "placement": "bottom", "showLegend": false },
         "tooltip": { "mode": "single", "sort": "none" }
       },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "avg_over_time({job=\"worker\"} |~ `\"span\":\"llm_call\"` | regexp `(?P<json_data>{.*})` | line_format \"{{.json_data}}\" | json | unwrap duration_ms [$__interval])",
-          "legendFormat": "LLM Latency",
+          "expr": "quantile_over_time(0.5, {job=\"worker\"} |~ `\"span\":\"llm_call\"` | json | unwrap duration_ms [1m])",
+          "legendFormat": "{{Value}} ms",
           "queryType": "range",
           "refId": "A"
         }
@@ -329,14 +417,14 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "id": 7,
       "options": {
-        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true, "width": 200 },
         "tooltip": { "mode": "multi", "sort": "none" }
       },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "sum_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | regexp `(?P<json_data>{.*})` | line_format \"{{.json_data}}\" | json | unwrap counts_from_graph [$__interval])",
+          "expr": "sum_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_graph [$__interval])",
           "legendFormat": "Graph",
           "queryType": "range",
           "refId": "A"
@@ -344,7 +432,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "sum_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | regexp `(?P<json_data>{.*})` | line_format \"{{.json_data}}\" | json | unwrap counts_from_vector [$__interval])",
+          "expr": "sum_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_vector [$__interval])",
           "legendFormat": "Vector",
           "queryType": "range",
           "refId": "B"
@@ -386,15 +474,15 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "id": 8,
       "options": {
-        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "legend": { "calcs": [], "displayMode": "hidden", "placement": "bottom", "showLegend": false },
         "tooltip": { "mode": "single", "sort": "none" }
       },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "sum_over_time({job=\"worker\"} |~ `\"span\":\"infer_edges_total\"` | regexp `(?P<json_data>{.*})` | line_format \"{{.json_data}}\" | json | unwrap counts_edges_created [$__interval])",
-          "legendFormat": "Edges Created",
+          "expr": "sum_over_time({job=\"worker\"} |~ `\"span\":\"infer_edges_total\"` | json | unwrap counts_edges_created [$__interval])",
+          "legendFormat": "",
           "queryType": "range",
           "refId": "A"
         }
