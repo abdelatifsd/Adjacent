@@ -285,3 +285,133 @@ See [src/commons/metrics.py](../src/commons/metrics.py) for the complete metrics
 - Keep `attrs` small (IDs, short strings, small ints only)
 - Never include PII, embeddings, or large text in attrs
 - Always provide `trace_id` to correlate related operations
+
+## Grafana Dashboard Best Practices
+
+When creating or modifying Grafana dashboards for Loki metrics, follow these best practices to ensure clean, usable visualizations:
+
+### 1. LogQL Query Best Practices
+
+**Avoid `avg_over_time` with `unwrap`:**
+- `avg_over_time(... | unwrap field)` has known bugs in Loki
+- **Use instead:** `quantile_over_time(0.5, ... | unwrap field [interval])` for median, or `sum_over_time(... | unwrap field [interval]) / count_over_time(... [interval])` for mean
+
+**Example:**
+```logql
+# ❌ Avoid (can cause "unimplemented" errors)
+avg_over_time({job="api"} | json | unwrap duration_ms [1m])
+
+# ✅ Use median instead
+quantile_over_time(0.5, {job="api"} | json | unwrap duration_ms [1m])
+
+# ✅ Or use sum/count division for mean
+sum_over_time({job="api"} | json | unwrap duration_ms [1m]) / count_over_time({job="api"} |~ `"span":"query_total"` [1m])
+```
+
+**Clean JSON parsing:**
+- Since logs are pushed as clean JSON (no prefixes), use `| json` directly
+- No need for regex extraction: `| regexp ... | line_format ...`
+
+### 2. Legend Configuration
+
+**For single-series panels:**
+- Hide legends to reduce clutter: `"showLegend": false`
+- Remove calculations: `"calcs": []`
+
+**For multi-series panels:**
+- Use compact table mode: `"displayMode": "table", "width": 150`
+- Remove unnecessary calculations
+
+**Example:**
+```json
+"legend": {
+  "calcs": [],
+  "displayMode": "hidden",
+  "showLegend": false
+}
+```
+
+### 3. Tooltip Configuration
+
+**Hide JSON fields from tooltips:**
+- Add field overrides to hide all JSON metadata fields
+- Show only the metric value of interest
+
+**Example field overrides:**
+```json
+"overrides": [
+  {
+    "matcher": { "id": "byName", "options": "event_type" },
+    "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+  },
+  {
+    "matcher": { "id": "byName", "options": "span" },
+    "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+  },
+  // ... hide other JSON fields: operation, trace_id, counts, attrs, timestamp, schema_version, status
+  {
+    "matcher": { "id": "byName", "options": "Value" },
+    "properties": [
+      { "id": "displayName", "value": "Latency" },
+      { "id": "custom.hideFrom", "value": { "tooltip": false, "viz": false, "legend": true } }
+    ]
+  }
+]
+```
+
+This ensures tooltips show only the metric value (e.g., "Latency: 558.11 ms") instead of the full JSON structure.
+
+### 4. Time Series Panel Configuration
+
+**For latency/duration metrics:**
+- Use `quantile_over_time(0.5, ...)` for median (more stable than mean)
+- Set appropriate units: `"unit": "ms"` or `"unit": "s"`
+- Configure thresholds for visual alerts:
+  ```json
+  "thresholds": {
+    "mode": "absolute",
+    "steps": [
+      { "color": "green", "value": null },
+      { "color": "yellow", "value": 100 },
+      { "color": "red", "value": 500 }
+    ]
+  }
+  ```
+
+**For count metrics:**
+- Use `sum_over_time(... | unwrap count_field [$__interval])`
+- Set unit: `"unit": "short"` for automatic formatting
+
+### 5. Panel Organization
+
+- Group related panels in rows with descriptive titles
+- Use consistent color schemes (e.g., green for graph metrics, purple for LLM metrics)
+- Set appropriate refresh intervals: `"refresh": "10s"` for real-time monitoring
+
+### 6. Common Pitfalls to Avoid
+
+1. **Don't use `avg_over_time` with `unwrap`** - causes "unimplemented" errors
+2. **Don't show full JSON in tooltips** - use field overrides to hide metadata
+3. **Don't stack legends** - hide them for single-series, use compact mode for multi-series
+4. **Don't use regex extraction** - logs are already clean JSON, use `| json` directly
+5. **Don't hardcode intervals** - use `[$__interval]` for time series, `[$__range]` for stat panels
+
+### 7. Testing Your Dashboard
+
+After creating or modifying panels:
+
+1. **Verify queries work:** Check for syntax errors in Grafana's query inspector
+2. **Check tooltips:** Hover over data points - should show only metric values, not full JSON
+3. **Verify legends:** Should be hidden or compact, not overwhelming
+4. **Test with real data:** Generate some metrics and verify visualizations render correctly
+5. **Check time ranges:** Ensure queries work across different time ranges (1h, 6h, 24h)
+
+### Reference: Current Dashboard Structure
+
+The `adjacent-metrics.json` dashboard demonstrates these best practices:
+- Clean LogQL queries using `quantile_over_time` instead of `avg_over_time`
+- Hidden legends on single-series panels
+- Compact table legends on multi-series panels
+- Field overrides to hide JSON metadata from tooltips
+- Proper unit configuration (ms for latency, short for counts)
+- Organized into logical rows (Overview, Performance Over Time, Graph Evolution)

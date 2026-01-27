@@ -411,13 +411,55 @@
           {
             "matcher": { "id": "byName", "options": "Vector" },
             "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "event_type" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "span" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "operation" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "trace_id" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "counts" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "attrs" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "timestamp" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "schema_version" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "status" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value" },
+            "properties": [
+              { "id": "custom.hideFrom", "value": { "tooltip": false, "viz": false, "legend": true } }
+            ]
           }
         ]
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "id": 7,
       "options": {
-        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true, "width": 200 },
+        "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true, "width": 150 },
         "tooltip": { "mode": "multi", "sort": "none" }
       },
       "targets": [
@@ -469,7 +511,51 @@
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "event_type" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "span" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "operation" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "trace_id" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "counts" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "attrs" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "timestamp" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "schema_version" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "status" },
+            "properties": [{ "id": "custom.hideFrom", "value": { "tooltip": true, "viz": true, "legend": true } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value" },
+            "properties": [
+              { "id": "displayName", "value": "Edges" },
+              { "id": "custom.hideFrom", "value": { "tooltip": false, "viz": false, "legend": true } }
+            ]
+          }
+        ]
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "id": 8,
