@@ -70,8 +70,6 @@ curl http://localhost:8000/v1/system/status | jq
 curl http://localhost:8000/v1/query/<product_id>?top_k=10 | jq
 ```
 
-See [docs/system_dynamics.md](docs/system_dynamics.md) for understanding cold start behavior and system evolution.
-
 ### Development Workflow
 
 The `make dev` command runs everything in Docker with hot reload enabled. Changes to Python files in `src/` are automatically picked up.
@@ -116,7 +114,7 @@ But many catalogs start with **none of that**.
 
 Adjacent answers a different question:
 
-> *Given only a product catalog, can we infer useful recommendation structure — and improve it over time — without precomputing everything upfront?*
+> *Given only a product catalog, can we infer useful recommendation structure and improve it over time without precomputing everything upfront?*
 
 ---
 
@@ -223,49 +221,10 @@ When a product `X` is queried:
 This loop repeats, gradually enriching the graph with both direct and transitive relationships.
 
 **Key Decision Point (Step 3):**
-- With endpoint reinforcement enabled: already-connected *vector* candidates can be re-sent for inference, but only up to a threshold (default: 2 anchors, confidence < 0.70)
+- With endpoint reinforcement enabled: already-connected *vector* candidates can be re-sent for inference, but only up to a threshold (default: 5 anchors, confidence < 0.70)
 - After threshold: Only third-party anchors can reinforce the edge
 - This balances fast reinforcement for popular products with efficiency
-
----
-
-## Documentation & Guides
-
-### Getting Started
-
-- **[System Dynamics & Cold Start Guide](docs/system_dynamics.md)** - Essential reading for first-time users
-  - Understand cold start behavior and what to expect
-  - Learn how the system evolves from vector-only to graph+vector
-  - First run checklist and validation steps
-  - Use the `/v1/system/status` endpoint to monitor system health
-
-- **[API Reference](docs/api.md)** - Complete HTTP API documentation
-  - Quick start instructions
-  - Environment setup
-  - Endpoint reference with examples
-  - Running the server and worker
-
-### Deep Dives
-
-- **[Async Architecture](docs/async_architecture.md)** - Detailed explanation of the inference system
-  - How QueryService and Worker interact
-  - Job queueing and status tracking
-  - Performance characteristics
-
-- **[Metrics Guide](docs/metrics.md)** - Performance instrumentation details
-
-### Key Endpoints
-
-```bash
-# Check system health and dynamics
-curl http://localhost:8000/v1/system/status
-
-# Get recommendations
-curl http://localhost:8000/v1/query/product_123?top_k=10
-
-# Check job status
-curl http://localhost:8000/v1/jobs/abc-123
-```
+- The threshold is configurable via `AsyncConfig.endpoint_reinforcement_threshold`
 
 ---
 
@@ -465,7 +424,7 @@ Adjacent explicitly assumes:
 4. Global graph coherence is less important than **local correctness**
 5. Reinforcement over time matters more than **single-shot accuracy**
 
-*These are intentional tradeoffs, not oversights.*
+*These are intentional tradeoffs.*
 
 ---
 
@@ -473,23 +432,17 @@ Adjacent explicitly assumes:
 
 The following are acknowledged limitations in v1, documented here to inform future iteration:
 
-### 1. Token Costs at Scale
+### 1. LLM Usage Is Front-Loaded
 
-Each query may enqueue an LLM call with anchor + candidates (when there are eligible vector candidates and an API key is configured). At high query volume, costs can escalate.
+LLM inference in Adjacent is naturally amortized. As graph neighborhoods mature, vector candidates are filtered and inference is skipped. Early runs may incur higher LLM usage, but mature regions rely primarily on graph traversal.
 
-**Future mitigations:**
-- Caching inference results for repeated queries
-- Batching multiple anchors into a single LLM call
-- A "saturation threshold" where densely-connected graph regions skip LLM inference
+Future work may explore explicit saturation thresholds, caching, or batch inference.
 
 ### 2. No Edge Decay or Dispute Mechanism
 
-Once an edge is created, it persists indefinitely.
+The graph is monotonic in v1. Edges are never removed or demoted. This is an intentional simplification prioritizing auditability and clarity.
 
-**Future versions may need:**
-- Edge expiry for stale relationships (e.g., seasonal products)
-- A dispute/downvote mechanism to flag bad edges
-- Type migration (e.g., `SIMILAR_TO` → `SUBSTITUTE_FOR` as evidence changes)
+Future iterations may introduce decay, review, or type migration mechanisms.
 
 ### 3. Single Embedding Field
 
@@ -499,20 +452,42 @@ Currently `embed_text` is derived only from description.
 - Concatenate title + category + tags into `embed_text`
 - The `EmbeddingConfig` is designed for this — extend `FIELDS` tuple and bump `VERSION`
 
-### 4. Hybrid Search Not Implemented
+### 4. Local Correctness Over Global Optimality
 
-The current `Neo4jVectorStore` implements pure vector similarity. True hybrid search (vector + keyword/fulltext) would require:
-- A fulltext index on Product nodes
-- Score blending between vector similarity and BM25/keyword relevance
+Adjacent favors local correctness around active anchors rather than enforcing global graph coherence. This tradeoff simplifies reasoning but may allow early inaccuracies to persist.
 
-This often improves precision for product search use cases.
+### 5. No Formal Evaluation Framework
 
-### 5. Graph Monotonicity
+Adjacent does not include a built-in evaluation framework for validating inferred edges against ground truth.
 
-The graph only grows — edges are never removed or demoted in v1. This is intentional for simplicity but means early bad inferences persist. A future "edge review" or confidence decay mechanism could address this.
+Edges are inferred by an LLM using world knowledge and reinforced over time via distinct anchor contexts. While this reinforcement mechanism reduces the impact of single-shot errors, it does not guarantee correctness. Incorrect or weakly grounded edges may persist, particularly in early stages or in low-diversity query regimes.
+
+This reflects a broader challenge in cold-start recommendation: when no behavioral data exists, there is no obvious objective signal to evaluate against.
+
+**That said, Adjacent is designed to be inspectable and auditable by construction:**
+
+- Edge provenance is tracked
+- Confidence grows only via anchor diversity
+- Early edges are capped and require repeated reinforcement
+
+**Future directions may include:**
+
+- Meta-evaluation agents that review edges for consistency or plausibility
+- Human-in-the-loop review workflows
+- Dataset-specific validation heuristics
+
+Adjacent prioritizes useful structure over perfect certainty, under the assumption that a weak but improving semantic graph is often more valuable than no structure at all.
 
 ---
 
 ## License
 
-*[Add license information here]*
+Adjacent is released under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Adjacent Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
