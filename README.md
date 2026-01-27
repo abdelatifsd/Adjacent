@@ -305,6 +305,21 @@ Query anchor G → candidates [B, C, X]
 - Hard cap: 0.95 (no false certainty)
 - ACTIVE threshold: 0.70 (typically ~3 distinct anchors)
 
+### Confidence as a Ranking Signal
+
+The confidence score serves a dual purpose: it gates edge status (PROPOSED vs ACTIVE) and provides a natural ranking mechanism during retrieval.
+
+When returning recommendations, products connected via high-confidence edges can be ranked above those with newer, less-validated relationships. This means the system returns not only semantically relevant products but also prioritizes relationships that have been independently validated across multiple anchor contexts.
+
+This ranking signal emerges organically from the reinforcement process. No separate scoring model is required. Edges that survive repeated inference from diverse anchors carry an implicit quality prior, reducing the influence of single-shot LLM errors or context-specific artifacts.
+
+In practice, this enables a two-dimensional ranking strategy:
+
+1. **Relevance**: Which products are related (via edge type and graph structure)
+2. **Reliability**: How well-established is that relationship (via confidence score)
+
+Both dimensions are available at query time without additional computation.
+
 ---
 
 ## Filtering & Reinforcement Logic
@@ -477,6 +492,24 @@ This reflects a broader challenge in cold-start recommendation: when no behavior
 - Dataset-specific validation heuristics
 
 Adjacent prioritizes useful structure over perfect certainty, under the assumption that a weak but improving semantic graph is often more valuable than no structure at all.
+
+---
+
+## Extensions and Research Directions
+
+Adjacent is minimal in v1. However, the architecture enables several natural extensions beyond cold-start recommendation.
+
+### 1. Multimodal Catalog Understanding
+
+While v1 uses text-only embeddings, the same pipeline can support multimodal representations: image embeddings from product photos, text-image fusion, or video and audio for media catalogs. These embeddings can seed vector retrieval, inform LLM inference, and propagate into the graph structure. This allows Adjacent to operate on catalogs where semantics are visual or multimodal by nature, such as fashion, furniture, or art.
+
+### 2. Graph as a Queryable Medium
+
+The constructed graph is not just a recommendation artifact; it is a structured semantic medium. With an MCP-style interface (Model Context Protocol for LLM tool use), an agent could query the graph directly, reason over neighborhoods and edge types. In this framing, Adjacent becomes a semantic memory layer rather than just a recommender backend.
+
+### 3. Knowledge Graph Construction for Representation Learning
+
+As the graph grows, it encodes higher-order structure that can be reused. Node embeddings learned from the graph (via Node2Vec, GNNs, or similar methods) and edge-type-aware representations can enrich product embeddings with relational context. These representations could support clustering, classification, downstream ML tasks, or bootstrapping supervised models once labels appear. In this sense, Adjacent can act as a pre-training signal generator for later ML pipelines.
 
 ---
 
