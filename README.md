@@ -451,8 +451,6 @@ Adjacent explicitly assumes:
 4. Global graph coherence is less important than **local correctness**
 5. Reinforcement over time matters more than **single-shot accuracy**
 
-*These are intentional tradeoffs.*
-
 ---
 
 ## Known Limitations & Future Considerations
