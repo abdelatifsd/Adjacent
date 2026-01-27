@@ -36,7 +36,7 @@ reset-full:
 	@echo "Stopping RQ worker..."
 	@pkill -f "rq worker adjacent_inference" 2>/dev/null || echo "  (no worker process running)"
 	@echo "Stopping monitoring stack..."
-	@docker compose down 2>/dev/null || echo "  (monitoring stack not running)"
+	@docker compose down -v 2>/dev/null || echo "  (monitoring stack not running)"
 	@echo "Waiting for processes to terminate..."
 	@sleep 2
 	@echo ""
