@@ -1,4 +1,4 @@
-.PHONY: tree validate setup test clean monitoring-up monitoring-down monitoring-logs reset
+.PHONY: tree validate setup test clean monitoring-up monitoring-down monitoring-logs reset reset-full
 
 # Use 'uv run' to ensure the environment is synced and used correctly
 PYTHON := uv run python
@@ -25,6 +25,44 @@ reset:
 	@$(MAKE) embed
 	@echo ""
 	@echo "Reset complete! Run 'make api-start' and 'make worker' to start services."
+
+reset-full:
+	@echo "============================================"
+	@echo "FULL RESET: Stopping all services"
+	@echo "============================================"
+	@echo ""
+	@echo "Stopping API server (uvicorn)..."
+	@pkill -f "uvicorn adjacent.api.app" 2>/dev/null || echo "  (no API process running)"
+	@echo "Stopping RQ worker..."
+	@pkill -f "rq worker adjacent_inference" 2>/dev/null || echo "  (no worker process running)"
+	@echo "Stopping monitoring stack..."
+	@docker compose down 2>/dev/null || echo "  (monitoring stack not running)"
+	@echo "Waiting for processes to terminate..."
+	@sleep 2
+	@echo ""
+	@echo "============================================"
+	@echo "Resetting data and infrastructure"
+	@echo "============================================"
+	@$(MAKE) reset
+	@echo ""
+	@echo "============================================"
+	@echo "Starting monitoring stack"
+	@echo "============================================"
+	@$(MAKE) monitoring-up
+	@echo ""
+	@echo "============================================"
+	@echo "FULL RESET COMPLETE"
+	@echo "============================================"
+	@echo ""
+	@echo "Infrastructure ready:"
+	@echo "  ✓ Neo4j:    bolt://localhost:7688"
+	@echo "  ✓ Redis:    redis://localhost:6379"
+	@echo "  ✓ Grafana:  http://localhost:3000 (admin/admin)"
+	@echo ""
+	@echo "Next steps (run in separate terminals):"
+	@echo "  1. make api-start    # Terminal 1: Start API server"
+	@echo "  2. make worker       # Terminal 2: Start RQ worker"
+	@echo ""
 
 tree:
 	tree -L 5 -I '.git|.venv|__pycache__'
