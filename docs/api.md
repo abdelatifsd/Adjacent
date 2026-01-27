@@ -385,13 +385,26 @@ while true; do
 done
 ```
 
-**Error Response:**
+**Error Responses:**
 
 ```json
+// Job not found
 {
   "job_id": "invalid-id",
   "status": "not_found",
   "error": "No such job: invalid-id"
+}
+
+// Redis unavailable (503)
+{
+  "error": "Job queue temporarily unavailable",
+  "error_type": "redis_unavailable"
+}
+
+// Internal error (500)
+{
+  "error": "Failed to retrieve job status",
+  "error_type": "internal_error"
 }
 ```
 

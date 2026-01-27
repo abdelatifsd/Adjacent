@@ -22,11 +22,11 @@ The metrics system produces JSONL (JSON Lines) structured events for:
 Metrics are written as JSONL files. The `logs/` directory is git-ignored and is the recommended location for storing metrics output:
 
 ```bash
-# Recommended: Write to logs/ directory (git-ignored)
-python scripts/baseline_metrics.py --output logs/metrics.jsonl
+# Metrics are automatically written by QueryService and worker tasks
+# Configure output location via logging_config:
+from commons.logging_config import configure_metrics_logger
 
-# Analyze from logs/
-python scripts/analyze_metrics.py logs/metrics.jsonl
+logger = configure_metrics_logger("adjacent", output_file="logs/metrics.jsonl")
 ```
 
 **Note**: The `logs/` directory, `*.jsonl` files, and `*.log` files are all excluded from git via `.gitignore`.
@@ -122,6 +122,7 @@ Record a point-in-time metric:
 **Spans:**
 - `query_total`: Total query duration
 - `fetch_anchor`: Fetch anchor product from Neo4j
+- `increment_query_count`: Update anchor's total query count
 - `graph_neighbors`: Get existing graph edges
 - `vector_search`: Vector similarity search (if needed)
 - `enqueue_inference`: Enqueue async inference job
@@ -148,34 +149,40 @@ Record a point-in-time metric:
 - `candidates_count`: Number of candidate products
 - `patches_count`: Number of edge patches from LLM
 - `edges_created`: Number of new edges created
-- `edges_reinforced`: Number of existing edges reinforced
+- `edges_reinforced`: Number of existing edges reinforced (anchor newly observed)
+- `anchor_edges_created`: Number of new edges directly involving the anchor
+- `candidate_edges_created`: Number of new edges between candidates
+- `edges_noop_existing`: Number of edges that already existed with this anchor
+- `input_tokens`: LLM input tokens consumed
+- `output_tokens`: LLM output tokens generated
+- `total_tokens`: Total LLM tokens (input + output)
+- `cached_tokens`: Number of cached tokens (prompt caching)
+- `reasoning_tokens`: Number of reasoning tokens (for reasoning models)
 
-## Baseline Collection
+**Attributes (llm_call span):**
+- `model`: LLM model used for inference
+- `response_id`: OpenAI response ID
+- `system_prompt_hash`: Hash of system prompt content
+- `user_prompt_hash`: Hash of user prompt content
+- `status`: LLM response status
+- `service_tier`: OpenAI service tier (if available)
 
-### Run baseline queries
+## Analyzing Metrics
+
+### View metrics events
 
 ```bash
-# Run 50 queries, output to metrics.jsonl
-python scripts/baseline_metrics.py --queries 50 --output metrics.jsonl
-
-# Run with async inference enabled
-python scripts/baseline_metrics.py --queries 20 --with-inference --output metrics.jsonl
-```
-
-### Analyze the results
-
-```bash
-# View all events
-cat metrics.jsonl | jq
-
-# Get span summary
-python scripts/analyze_metrics.py metrics.jsonl
+# View all events from logs directory
+cat logs/metrics.jsonl | jq
 
 # Extract specific span timings with jq
-cat metrics.jsonl | jq -s '.[] | select(.span=="vector_search") | .duration_ms'
+cat logs/metrics.jsonl | jq -s '.[] | select(.span=="vector_search") | .duration_ms'
+
+# Filter by operation
+cat logs/metrics.jsonl | jq -s '.[] | select(.operation=="query")'
 
 # Compute percentiles by span
-cat metrics.jsonl | jq -s '
+cat logs/metrics.jsonl | jq -s '
   group_by(.span) |
   map({
     span: .[0].span,
@@ -184,44 +191,62 @@ cat metrics.jsonl | jq -s '
     p95: (sort_by(.duration_ms) | .[length*0.95 | floor].duration_ms)
   })
 '
+
+# Summarize LLM token usage
+cat logs/metrics.jsonl | jq -s '
+  [.[] | select(.span=="llm_call")] |
+  {
+    total_calls: length,
+    total_input_tokens: map(.counts.input_tokens // 0) | add,
+    total_output_tokens: map(.counts.output_tokens // 0) | add,
+    total_cached_tokens: map(.counts.cached_tokens // 0) | add
+  }
+'
 ```
 
-## Example Analysis Output
+## Example Metrics Output
 
+### Sample span event (query path)
+```json
+{
+  "schema_version": "1.0",
+  "timestamp": "2026-01-24T12:34:56.789Z",
+  "event_type": "span",
+  "operation": "query",
+  "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+  "span": "vector_search",
+  "duration_ms": 42.15,
+  "status": "ok",
+  "counts": {
+    "from_vector": 5
+  }
+}
 ```
-================================================================================
-SPAN TIMING ANALYSIS
-================================================================================
 
-Span: fetch_anchor
-  Count:          50 (50 ok, 0 errors)
-  Mean:        15.32 ms
-  p50:         14.50 ms
-  p95:         18.20 ms
-  p99:         19.10 ms
-  Min:         12.10 ms
-  Max:         20.45 ms
-  Operations: {'query': 50}
-
-Span: graph_neighbors
-  Count:          50 (50 ok, 0 errors)
-  Mean:        23.45 ms
-  p50:         22.30 ms
-  p95:         28.90 ms
-  p99:         31.20 ms
-  Min:         18.50 ms
-  Max:         33.10 ms
-  Operations: {'query': 50}
-
-Span: vector_search
-  Count:          35 (35 ok, 0 errors)
-  Mean:        42.11 ms
-  p50:         40.20 ms
-  p95:         52.30 ms
-  p99:         56.70 ms
-  Min:         35.10 ms
-  Max:         58.20 ms
-  Operations: {'query': 35}
+### Sample span event (worker path)
+```json
+{
+  "schema_version": "1.0",
+  "timestamp": "2026-01-24T12:35:10.123Z",
+  "event_type": "span",
+  "operation": "infer_edges",
+  "trace_id": "660e8400-e29b-41d4-a716-446655440111",
+  "span": "llm_call",
+  "duration_ms": 1250.75,
+  "status": "ok",
+  "attrs": {
+    "model": "gpt-4o-mini",
+    "response_id": "chatcmpl-abc123",
+    "status": "completed"
+  },
+  "counts": {
+    "patches_count": 15,
+    "input_tokens": 2500,
+    "output_tokens": 450,
+    "total_tokens": 2950,
+    "cached_tokens": 1200
+  }
+}
 ```
 
 ## Safety Guidelines

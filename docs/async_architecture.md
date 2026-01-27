@@ -71,11 +71,19 @@ with QueryService(config) as svc:
 ```
 
 **QueryResult fields:**
-- `recommendations` — List of recommendations (mixed graph + vector)
+- `anchor_id` — Anchor product ID
+- `recommendations` — List of `Recommendation` objects (mixed graph + vector)
 - `from_graph` — Count from existing edges
 - `from_vector` — Count from vector similarity
 - `inference_status` — "complete" | "enqueued" | "skipped"
 - `job_id` — RQ job ID for status tracking
+
+**Recommendation fields:**
+- `product_id` — Candidate product ID
+- `edge_type` — Type of edge (e.g., "substitute", "complement") or None
+- `confidence` — Confidence score (0.0-1.0) or None
+- `source` — "graph" (from existing edges) or "vector" (from similarity search)
+- `score` — Vector similarity score (only present for vector-sourced recommendations)
 
 ### 2. Inference Task (`src/adjacent/async_inference/tasks.py`)
 
@@ -142,6 +150,11 @@ class AsyncConfig:
     openai_api_key: Optional[str] = None
     llm_model: str = "gpt-4o-mini"
 
+    # Prompt and schema paths
+    system_prompt_path: Path = Path("src/adjacent/prompts/edge_infer.system.txt")
+    user_prompt_path: Path = Path("src/adjacent/prompts/edge_infer.user.txt")
+    edge_patch_schema_path: Path = Path("schemas/edge_patch.json")
+
     # Query settings
     top_k_candidates: int = 10
     max_recommendations: int = 10
@@ -160,7 +173,12 @@ class AsyncConfig:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `embedding_provider` | `"huggingface"` | Embedding provider (huggingface or openai) |
+| `llm_model` | `"gpt-4o-mini"` | OpenAI model for edge inference |
+| `system_prompt_path` | `Path("src/adjacent/prompts/edge_infer.system.txt")` | Path to system prompt for LLM |
+| `user_prompt_path` | `Path("src/adjacent/prompts/edge_infer.user.txt")` | Path to user prompt template |
+| `edge_patch_schema_path` | `Path("schemas/edge_patch.json")` | Path to edge patch JSON schema |
 | `top_k_candidates` | `10` | Number of candidates to consider for inference |
+| `job_timeout` | `300` | Maximum seconds per worker job (5 minutes) |
 | `allow_endpoint_reinforcement` | `True` | Enable reinforcement for low-confidence edges |
 | `endpoint_reinforcement_threshold` | `5` | Only reinforce if `anchors_seen` count < this |
 | `endpoint_reinforcement_max_confidence` | `0.70` | Don't reinforce if confidence >= this |
@@ -256,12 +274,18 @@ open http://localhost:3000  # admin/admin
 3. Returns graph-based recommendations (high confidence)
 4. May enqueue inference for any new vector candidates not yet connected
 
-## Tracking Inference
+## Tracking Queries and Inference
 
-Products track their inference history:
+Products track both query activity and inference history:
 
+**Query Tracking** (updated by QueryService on each query):
 ```cypher
-// Set by worker after successful inference
+MATCH (p:Product {id: $product_id})
+SET p.total_query_count = coalesce(p.total_query_count, 0) + 1
+```
+
+**Inference Tracking** (updated by worker after successful inference):
+```cypher
 MATCH (p:Product {id: $anchor_id})
 SET p.last_inference_at = datetime(),
     p.inference_count = coalesce(p.inference_count, 0) + 1
@@ -291,6 +315,132 @@ Or via the API:
 
 ```bash
 curl http://localhost:8000/v1/jobs/abc-123 | jq
+```
+
+## API Endpoints
+
+The Adjacent API provides the following endpoints:
+
+### GET /health
+Health check endpoint for monitoring and load balancers.
+
+```bash
+curl http://localhost:8000/health
+# Returns: {"status": "ok"}
+```
+
+### GET /v1/query/{product_id}
+Get recommendations for a product using async inference.
+
+**Query Parameters:**
+- `top_k` (int, optional): Number of recommendations (1-100, default: 10)
+- `skip_inference` (bool, optional): Skip async inference (default: false)
+
+**Headers:**
+- `X-Trace-Id` (optional): Custom trace ID for request correlation
+
+```bash
+curl "http://localhost:8000/v1/query/product_123?top_k=10" | jq
+```
+
+**Response:**
+```json
+{
+  "anchor_id": "product_123",
+  "recommendations": [
+    {
+      "product_id": "product_456",
+      "edge_type": "substitute",
+      "confidence": 0.85,
+      "source": "graph",
+      "score": null
+    }
+  ],
+  "from_graph": 7,
+  "from_vector": 3,
+  "inference_status": "enqueued",
+  "job_id": "abc-123",
+  "trace_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### GET /v1/perf/query/{product_id}
+Same as `/v1/query` but includes `request_total_ms` timing in the response.
+
+```bash
+curl "http://localhost:8000/v1/perf/query/product_123" | jq
+```
+
+**Response includes:**
+- All fields from `/v1/query`
+- `request_total_ms`: Total request duration in milliseconds
+
+### GET /v1/jobs/{job_id}
+Check status of an async inference job.
+
+```bash
+curl http://localhost:8000/v1/jobs/abc-123 | jq
+```
+
+**Response:**
+```json
+{
+  "job_id": "abc-123",
+  "status": "finished",
+  "result": {
+    "anchor_id": "product_123",
+    "edges_created": 5,
+    "anchor_edges_created": 3,
+    "candidate_edges_created": 2,
+    "edges_reinforced": 2,
+    "edges_noop_existing": 1
+  },
+  "error": null
+}
+```
+
+**Job Status Values:**
+- `queued` - Job is waiting to be processed
+- `started` - Worker is processing the job
+- `finished` - Job completed successfully
+- `failed` - Job failed with an error
+- `not_found` - Job ID doesn't exist
+
+### GET /v1/system/status
+Get system health and statistics including Neo4j, Redis, and graph coverage.
+
+```bash
+curl http://localhost:8000/v1/system/status | jq
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "neo4j": {
+    "connected": true,
+    "product_count": 1000,
+    "inferred_edge_count": 4500,
+    "vector_index": {
+      "present": true,
+      "state": "ONLINE",
+      "name": "product_embedding"
+    }
+  },
+  "inference": {
+    "redis_connected": true,
+    "queue_enabled": true,
+    "queue_name": "adjacent_inference",
+    "pending_jobs": 3
+  },
+  "dynamics": {
+    "graph_coverage_pct": 75.5,
+    "notes": [
+      "Cold start is expected: vector recommendations dominate until async inference creates edges.",
+      "Inferred edges and graph coverage increase over time as the worker runs."
+    ]
+  }
+}
 ```
 
 ## Future Enhancements
