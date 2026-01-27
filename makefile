@@ -1,4 +1,4 @@
-.PHONY: tree validate setup test clean
+.PHONY: tree validate setup test clean monitoring-up monitoring-down monitoring-logs reset
 
 # Use 'uv run' to ensure the environment is synced and used correctly
 PYTHON := uv run python
@@ -7,13 +7,32 @@ CHECK_JSONSCHEMA := uv run check-jsonschema
 setup:
 	uv sync
 
+reset:
+	@echo "Resetting all data and containers..."
+	@docker stop adjacent-neo4j adjacent-redis 2>/dev/null || true
+	@docker rm adjacent-neo4j adjacent-redis 2>/dev/null || true
+	@rm -rf neo4j-data
+	@echo "Clearing logs..."
+	@rm -f logs/api.log logs/worker.log
+	@echo "Starting fresh Neo4j and Redis..."
+	@$(MAKE) neo4j-start
+	@echo "Waiting for Neo4j to be ready..."
+	@sleep 10
+	@$(MAKE) redis-start
+	@sleep 2
+	@echo "Ingesting and embedding data..."
+	@$(MAKE) ingest
+	@$(MAKE) embed
+	@echo ""
+	@echo "Reset complete! Run 'make api-start' and 'make worker' to start services."
+
 tree:
 	tree -L 5 -I '.git|.venv|__pycache__'
 
 # In your NEW project Makefile
 neo4j-start:
 	@echo "Starting Neo4j for adjacent"
-	@docker run \
+	@docker run -d \
 	--name adjacent-neo4j \
 	-p 7475:7474 -p 7688:7687 \
 	-e NEO4J_AUTH=neo4j/adjacent123 \
@@ -109,34 +128,27 @@ worker-dashboard:
 	@echo "Starting RQ dashboard at http://localhost:9181"
 	uv run rq-dashboard --redis-url redis://localhost:6379/0
 
-# ----------------------------
-# Complete Pipeline
-# ----------------------------
-pipeline:
-	@echo "Running complete pipeline: preprocess → ingest → embed"
-	@$(MAKE) ingest
-	@$(MAKE) embed
-
-pipeline-async:
-	@echo "Running async pipeline: neo4j + redis + ingest + embed"
-	@$(MAKE) neo4j-start
-	@$(MAKE) redis-start
-	@sleep 5
-	@$(MAKE) ingest
-	@$(MAKE) embed
-	@echo "Start worker with: make worker"
 
 # ----------------------------
-# Quick Start (for testing)
+# Monitoring (Grafana + Loki)
 # ----------------------------
-dev:
-	@echo "Starting development environment..."
-	@echo "This will start Neo4j and Redis if not already running"
-	@$(MAKE) neo4j-start || docker start adjacent-neo4j || true
-	@$(MAKE) redis-start || true
-	@sleep 3
+monitoring-up:
+	@echo "Starting monitoring stack (Grafana + Loki + Promtail)..."
+	@mkdir -p logs
+	@docker compose up -d
 	@echo ""
-	@echo "Services ready! Now starting API server..."
-	@echo "Run 'make worker' in another terminal to enable async inference"
+	@echo "Monitoring services started:"
+	@echo "  - Grafana:  http://localhost:3000 (admin/admin)"
+	@echo "  - Loki:     http://localhost:3100"
 	@echo ""
-	@$(MAKE) api-start
+	@echo "Try these LogQL queries in Grafana Explore:"
+	@echo '  {job="api"} | json'
+	@echo '  {job="worker"} | json | span="llm_call"'
+	@echo '  {job=~"api|worker"} | json | trace_id="<your-trace-id>"'
+
+monitoring-down:
+	@echo "Stopping monitoring stack..."
+	@docker compose down
+
+monitoring-logs:
+	@docker compose logs -f

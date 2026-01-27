@@ -52,6 +52,7 @@ def infer_edges(
     anchor_id: str,
     candidate_ids: List[str],
     config_dict: Optional[Dict[str, Any]] = None,
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     RQ task: Infer edges between anchor and candidates.
@@ -80,7 +81,7 @@ def infer_edges(
     else:
         config = AsyncConfig()
 
-    trace_id = generate_trace_id()
+    trace_id = trace_id or generate_trace_id()
 
     # Get current RQ job ID for provenance tracking
     current_job = get_current_job()

@@ -391,6 +391,7 @@ class QueryService:
                                     anchor_id=product_id,
                                     candidate_ids=new_candidates,
                                     config_dict=config_dict,
+                                    trace_id=trace_id,
                                     job_timeout=self.config.job_timeout,
                                 )
                                 job_id = job.id
