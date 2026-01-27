@@ -110,11 +110,23 @@ Most recommendation systems assume you already have:
 - Sessions
 - Co-occurrence logs
 
-But many catalogs start with **none of that**.
+But many catalogs start with none of that.
 
-Adjacent answers a different question:
+Adjacent addresses a different problem:
 
-> *Given only a product catalog, can we infer useful recommendation structure and improve it over time without precomputing everything upfront?*
+> How can a system start with only a catalog, produce useful recommendations early, and become cheaper and more reliable as it is used?
+
+Instead of committing to a heavy offline pipeline or permanent LLM inference, Adjacent is designed to transition:
+
+- from semantic similarity (embeddings),
+- to selective LLM inference,
+- to fast, graph-native recommendations.
+
+This is enabled by asynchronous graph construction: queries return immediately using existing graph structure and embeddings, while background workers run LLM inference and materialize new edges. Users never wait for graph enrichment.
+
+The graph is built lazily, only where queries demand it. As structure accumulates, reliance on inference decreases, latency drops, and cost amortizes over time.
+
+What begins as a cold-start solution gradually becomes a reusable semantic asset: one that supports recommendations first, then broader reasoning and analysis as the graph matures.
 
 ---
 
