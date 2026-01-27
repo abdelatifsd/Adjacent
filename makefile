@@ -151,12 +151,12 @@ worker:
 	@if [ -f .env ]; then \
 		echo "Loading environment from .env file..."; \
 		export $$(cat .env | grep -v '^#' | xargs) && \
-		OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES PYTHONPATH=src uv run rq worker adjacent_inference \
+		NO_COLOR=1 OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES PYTHONPATH=src uv run rq worker adjacent_inference \
 			--url redis://localhost:6379/0 \
 			--with-scheduler; \
 	else \
 		echo "Warning: .env file not found"; \
-		OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES PYTHONPATH=src uv run rq worker adjacent_inference \
+		NO_COLOR=1 OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES PYTHONPATH=src uv run rq worker adjacent_inference \
 			--url redis://localhost:6379/0 \
 			--with-scheduler; \
 	fi
@@ -190,3 +190,6 @@ monitoring-down:
 
 monitoring-logs:
 	@docker compose logs -f
+
+monitoring-status:
+	@bash scripts/check_monitoring.sh

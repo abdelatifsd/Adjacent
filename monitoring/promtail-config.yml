@@ -4,81 +4,29 @@ server:
 
 positions:
   filename: /tmp/positions.yaml
+  sync_period: 1s
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
 
+target_config:
+  sync_period: 5s
+
 scrape_configs:
-  # API logs (JSONL metrics)
+  # API logs - sends ALL lines to Loki
   - job_name: api
     static_configs:
       - targets:
           - localhost
         labels:
           job: api
-          service: adjacent
           __path__: /var/log/adjacent/api.log
-    pipeline_stages:
-      # Extract JSON payload after the logger prefix
-      - regex:
-          expression: '^.+?\[(?P<level>\w+)\]\s+(?P<logger>[\w.]+):\s+(?P<json_payload>\{.+\})$'
-      # Parse the extracted JSON for labels
-      - json:
-          source: json_payload
-          expressions:
-            event_type: event_type
-            operation: operation
-            span: span
-            trace_id: trace_id
-            status: status
-            timestamp: timestamp
-      # Extract labels for filtering
-      - labels:
-          event_type:
-          operation:
-          span:
-          status:
-      # Use timestamp from JSON payload
-      - timestamp:
-          source: timestamp
-          format: RFC3339Nano
-      # Replace log line with just the JSON (enables | json in LogQL)
-      - output:
-          source: json_payload
 
-  # Worker logs (JSONL metrics)
+  # Worker logs - sends ALL lines to Loki
   - job_name: worker
     static_configs:
       - targets:
           - localhost
         labels:
           job: worker
-          service: adjacent
           __path__: /var/log/adjacent/worker.log
-    pipeline_stages:
-      # Extract JSON payload after the logger prefix
-      - regex:
-          expression: '^.+?\[(?P<level>\w+)\]\s+(?P<logger>[\w.]+):\s+(?P<json_payload>\{.+\})$'
-      # Parse the extracted JSON for labels
-      - json:
-          source: json_payload
-          expressions:
-            event_type: event_type
-            operation: operation
-            span: span
-            trace_id: trace_id
-            status: status
-            timestamp: timestamp
-      # Extract labels for filtering
-      - labels:
-          event_type:
-          operation:
-          span:
-          status:
-      # Use timestamp from JSON payload
-      - timestamp:
-          source: timestamp
-          format: RFC3339Nano
-      # Replace log line with just the JSON (enables | json in LogQL)
-      - output:
-          source: json_payload
