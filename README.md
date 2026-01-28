@@ -142,7 +142,7 @@ Open the Neo4j Browser at [http://localhost:7475](http://localhost:7475) and run
 MATCH (p:Product) RETURN p
 ```
 
-You'll see your product catalog as disconnected nodes—no relationships yet.
+You'll see your product catalog as disconnected nodes - no relationships yet.
 
 <img src="assets/examples/nodes_display_neo4j.png" alt="Product nodes in Neo4j" width="800">
 
@@ -537,7 +537,7 @@ Currently `embed_text` is derived only from description.
 
 **For richer retrieval:**
 - Concatenate title + category + tags into `embed_text`
-- The `EmbeddingConfig` is designed for this — extend `FIELDS` tuple and bump `VERSION`
+- The `EmbeddingConfig` is designed for this  -  extend `FIELDS` tuple and bump `VERSION`
 
 ### 4. Local Correctness Over Global Optimality
 
