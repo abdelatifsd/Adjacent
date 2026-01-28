@@ -101,19 +101,25 @@ Regular Python log messages without structured data. These are also pushed to Lo
 
 The Grafana dashboard ([adjacent-metrics](http://localhost:3000/d/adjacent-metrics)) shows:
 
+### Vector → Graph Savings
+- **From Graph (count)** / **From Vector (count)**: Raw counts (no percentage) so you can compare graph vs vector split
+
 ### Overview Row
 - **Total Queries**: Count of API queries in selected time range
 - **Avg Query Time**: Mean query response time (green < 100ms < yellow < 500ms < red)
 - **LLM Calls**: Count of LLM inference calls
 - **Avg LLM Time**: Mean LLM inference time (green < 5s < yellow < 15s < red)
 
-### Performance Over Time Row
-- **Query Latency**: 5-minute rolling average of API query duration
-- **LLM Latency**: 5-minute rolling average of LLM call duration
+### Query Latency / LLM Latency
+- **Query Latency**: Median API query duration over time (`quantile_over_time`)
+- **LLM Latency**: Median LLM call duration over time
 
 ### Graph Evolution Row
 - **Result Sources**: Stacked bar chart showing results from graph vs. vector search (graph should increase over time as LLM builds edges)
 - **Edges Created**: Bar chart of new edges created by LLM inference
+
+### Token Economics, Sub-Span Latency, Edge Lifecycle
+- Token usage over time; per-operation latency; edge state transitions
 
 ## Common Operations
 
@@ -305,7 +311,31 @@ See [src/commons/metrics.py](../src/commons/metrics.py) for the complete metrics
 
 ## Grafana Dashboard Best Practices
 
-When creating or modifying Grafana dashboards for Loki metrics, follow these best practices to ensure clean, usable visualizations:
+**Before you commit any dashboard change:** run through the [Checklist: Do This Every Time](#checklist-do-this-every-time-mandatory) below (graphTooltip, tooltip single, showPoints always, showLegend false, tooltip field overrides). These settings prevent recurring bugs.
+
+When creating or modifying Grafana dashboards for Loki metrics, follow these best practices to ensure clean, usable visualizations.
+
+### Checklist: Do This Every Time (mandatory)
+
+**Before saving or committing any dashboard change, verify:**
+
+| Setting | Required value | Why |
+|--------|-----------------|-----|
+| **Dashboard: graphTooltip** | `0` | Per-panel tooltips only; avoids confusing shared crosshair behavior. |
+| **Time series: tooltip mode** | `"single"` (never `"multi"`) | Hover shows only the series under the cursor. `"multi"` lists every series and repeats names (e.g. "fetch anchor graph lookup graph lookup...") and overwhelms users. |
+| **Time series: showPoints** | `"always"` (never `"never"` or `"auto"`) | Data points (dots) are always visible on the line. With `"never"` or `"auto"`, points often only appear on hover, so users cannot see if there is data without hovering. |
+| **Time series: showLegend** | `false` | Prevents the legend from growing with every new series as data comes in. |
+| **Field overrides for tooltips** | Hide JSON metadata (event_type, span, trace_id, etc.); show only Value | Tooltips show the metric value (e.g. "558 ms"), not the full log line. |
+
+**In JSON:**
+
+- At dashboard level: `"graphTooltip": 0`
+- For every time series panel:
+  - `"options": { "tooltip": { "mode": "single", ... } }` — never `"mode": "multi"`
+  - In panel `fieldConfig.defaults.custom`: `"showPoints": "always"` — never `"never"` or `"auto"`
+  - `"options": { "legend": { "showLegend": false, ... } }`
+
+These settings fix recurring bugs: repeated/overwhelming tooltip series and invisible data points until hover. Apply them to every new or edited time series panel.
 
 ### 1. LogQL Query Best Practices
 
@@ -350,9 +380,17 @@ sum_over_time({job="api"} | json | unwrap duration_ms [1m]) / count_over_time({j
 
 ### 3. Tooltip Configuration
 
+**Always use single-series tooltips:**
+- Set **`"tooltip": { "mode": "single", ... }`** on every time series panel. Never use `"mode": "multi"`.
+- With `"multi"`, hovering lists every series at that time (e.g. fetch_anchor, graph_lookup, vector_search…) and can repeat the same names, which is confusing and recurring bug.
+- With `"single"`, the tooltip shows only the one series under the cursor.
+
+**Dashboard-level:**
+- Set **`"graphTooltip": 0`** in the dashboard JSON so tooltips are per-panel and not shared in a way that encourages multi-series listing.
+
 **Hide JSON fields from tooltips:**
-- Add field overrides to hide all JSON metadata fields
-- Show only the metric value of interest
+- Add field overrides to hide all JSON metadata fields (event_type, span, trace_id, counts, attrs, timestamp, schema_version, status).
+- Show only the metric value of interest (e.g. Value / displayName).
 
 **Example field overrides:**
 ```json
@@ -379,6 +417,11 @@ sum_over_time({job="api"} | json | unwrap duration_ms [1m]) / count_over_time({j
 This ensures tooltips show only the metric value (e.g., "Latency: 558.11 ms") instead of the full JSON structure.
 
 ### 4. Time Series Panel Configuration
+
+**Always show data points:**
+- Set **`"showPoints": "always"`** in `fieldConfig.defaults.custom` for every time series panel. Never use `"never"` or `"auto"`.
+- With `"never"` or `"auto"`, markers on the line often appear only on hover, so users cannot tell if there is data without moving the mouse. This is a recurring bug.
+- With `"always"`, dots are always drawn on the line so data is visible at a glance.
 
 **For latency/duration metrics:**
 - Use `quantile_over_time(0.5, ...)` for median (more stable than mean)
@@ -408,12 +451,23 @@ This ensures tooltips show only the metric value (e.g., "Latency: 558.11 ms") in
 ### 6. Common Pitfalls to Avoid
 
 1. **Don't use `avg_over_time` with `unwrap`** - causes "unimplemented" errors
-2. **Don't show full JSON in tooltips** - use field overrides to hide metadata
-3. **Don't stack legends** - hide them for single-series, use compact mode for multi-series
-4. **Don't use regex extraction** - logs are already clean JSON, use `| json` directly
-5. **Don't hardcode intervals** - use `[$__interval]` for time series, `[$__range]` for stat panels
+2. **Don't use division of two range/instant queries** - causes "unimplemented" (e.g. `A / B` where both are Loki queries). Show counts separately instead of percentages.
+3. **Don't show full JSON in tooltips** - use field overrides to hide metadata
+4. **Don't let legends grow** - set `showLegend: false` or `displayMode: "hidden"` so legends don't accumulate as data comes in
+5. **Don't use tooltip mode `"multi"`** - use `"single"` so the tooltip shows only the series under the cursor; multi repeats names and overwhelms
+6. **Don't use `showPoints: "never"` or `"auto"`** - use `"always"` so data points are visible without hovering
+7. **Don't use regex extraction** - logs are already clean JSON, use `| json` directly
+8. **Don't use unsupported colors** - use hex (e.g. `#d8d9da`) instead of names like `light-gray`
+9. **Don't hardcode intervals** - use `[$__interval]` for time series, `[$__range]` for stat panels
 
-### 7. Testing Your Dashboard
+### 7. Dashboard Panel Conventions (adjacent-metrics)
+
+- **Vector -> Graph Savings**: "From Graph (count)" and "From Vector (count)" show raw counts (no percentage) to avoid Loki division errors. Compare the two for graph vs vector split.
+- **Legends**: All time series panels have legends hidden (`showLegend: false`) so the legend list does not grow with data.
+- **Tooltips**: Field overrides hide JSON metadata (event_type, span, trace_id, etc.) so tooltips show only the metric value.
+- **Colors**: Use hex for grays (e.g. `#d8d9da`) to avoid "unsupported light gray color" errors.
+
+### 8. Testing Your Dashboard
 
 After creating or modifying panels:
 
@@ -425,10 +479,18 @@ After creating or modifying panels:
 
 ### Reference: Current Dashboard Structure
 
-The `adjacent-metrics.json` dashboard demonstrates these best practices:
-- Clean LogQL queries using `quantile_over_time` instead of `avg_over_time`
-- Hidden legends on single-series panels
-- Compact table legends on multi-series panels
+The `adjacent-metrics.json` dashboard demonstrates these best practices. **Current rows** (no "Performance Over Time" row; latency is in Overview + dedicated panels):
+
+- **Vector → Graph Savings**: From Graph (count) and From Vector (count) stat panels
+- **Overview**: Total Queries, Avg Query Time, LLM Calls, Avg LLM Time
+- **Query Latency / LLM Latency**: Time series for query and LLM duration (median via `quantile_over_time`)
+- **Graph Evolution**: Result Sources (stacked), Edges Created
+- **Token Economics**: Token Usage Over Time, etc.
+- **Sub-Span Latency**: Per-operation latency time series
+- **Edge Lifecycle**: State transitions over time
+
+**Conventions applied:**
+- Clean LogQL using `quantile_over_time` (not `avg_over_time` with unwrap)
+- Hidden legends; single-series tooltips; `showPoints: "always"`
 - Field overrides to hide JSON metadata from tooltips
-- Proper unit configuration (ms for latency, short for counts)
-- Organized into logical rows (Overview, Performance Over Time, Graph Evolution)
+- Units: ms for latency, short for counts; hex for colors (e.g. `#d8d9da`)
