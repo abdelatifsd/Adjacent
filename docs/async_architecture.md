@@ -164,7 +164,7 @@ class AsyncConfig:
 
     # Endpoint reinforcement settings
     allow_endpoint_reinforcement: bool = True
-    endpoint_reinforcement_threshold: int = 5
+    endpoint_reinforcement_threshold: int = 3  # Configurable
     endpoint_reinforcement_max_confidence: float = 0.70
 ```
 
@@ -180,11 +180,11 @@ class AsyncConfig:
 | `top_k_candidates` | `10` | Number of candidates to consider for inference |
 | `job_timeout` | `300` | Maximum seconds per worker job (5 minutes) |
 | `allow_endpoint_reinforcement` | `True` | Enable reinforcement for low-confidence edges |
-| `endpoint_reinforcement_threshold` | `5` | Only reinforce if `anchors_seen` count < this |
+| `endpoint_reinforcement_threshold` | `3` | Only reinforce if `anchors_seen` count < this (configurable to control batch sizes and convergence speed) |
 | `endpoint_reinforcement_max_confidence` | `0.70` | Don't reinforce if confidence >= this |
 
 **Endpoint Reinforcement:**
-When enabled, the system will re-infer edges for endpoints (candidates) that have low observation counts or confidence. This helps strengthen weak edges and improve recommendation quality over time.
+When enabled, the system will re-infer edges for endpoints (candidates) that have low observation counts or confidence. The threshold parameter controls how many times an edge can be reinforced before being filtered out - higher values allow more reinforcement attempts (larger batches, faster convergence) while lower values prioritize efficiency.
 
 ## Running
 

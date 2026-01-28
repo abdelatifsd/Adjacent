@@ -233,10 +233,10 @@ When a product `X` is queried:
 This loop repeats, gradually enriching the graph with both direct and transitive relationships.
 
 **Key Decision Point (Step 3):**
-- With endpoint reinforcement enabled: already-connected *vector* candidates can be re-sent for inference, but only up to a threshold (default: 5 anchors, confidence < 0.70)
+- With endpoint reinforcement enabled: already-connected *vector* candidates can be re-sent for inference, but only up to a threshold (default: 3 anchors, confidence < 0.70)
 - After threshold: Only third-party anchors can reinforce the edge
 - This balances fast reinforcement for popular products with efficiency
-- The threshold is configurable via `AsyncConfig.endpoint_reinforcement_threshold`
+- The threshold is configurable via `AsyncConfig.endpoint_reinforcement_threshold` - higher values allow more reinforcement attempts (larger batches, faster convergence) while lower values prioritize efficiency
 
 ---
 
@@ -356,7 +356,7 @@ Before asking the LLM, we check if candidates are already connected to the ancho
 
 **Configuration:**
 - `allow_endpoint_reinforcement: bool = True` - Enable/disable endpoint reinforcement
-- `endpoint_reinforcement_threshold: int = 2` - Max anchors_seen count for endpoint reinforcement
+- `endpoint_reinforcement_threshold: int = 3` - Max anchors_seen count for endpoint reinforcement (configurable to tune batch sizes and convergence behavior)
 - `endpoint_reinforcement_max_confidence: float = 0.70` - Max confidence for endpoint reinforcement
 
 **Note on multiple edge types:** If multiple semantic edge types exist between the same pair (e.g., `A↔C (COMPLEMENTS)` and `A↔C (SUBSTITUTE_FOR)`), endpoint reinforcement gating uses the **maximum** anchors_seen count and **maximum** confidence across those types. This keeps filtering stable and prevents repeatedly re-inferencing a pair once *any* relationship type is already “mature”.
@@ -369,29 +369,33 @@ Query B → C appears as vector candidate
 Check: Does B-C exist?
   ├─ No → Include C → LLM(B, [C, ...]) → Create B-C
   └─ Yes → Check metadata:
-      ├─ anchors_seen < 2 AND confidence < 0.70?
+      ├─ anchors_seen < threshold AND confidence < 0.70?
       │   └─ Yes → Include C → LLM(B, [C, ...]) → Reinforce B-C
       └─ No → Filter C → No LLM call for B-C
 ```
 
-**Example with Endpoint Reinforcement:**
+**Example with Endpoint Reinforcement (threshold=3):**
 
 ```
 Initial: B-C exists, anchors_seen=[A], confidence=0.55
 
 Query B → C appears as candidate
-  └── Check: B-C has 1 anchor (< threshold of 2)
+  └── Check: B-C has 1 anchor (< threshold of 3)
   └── Include C → LLM(B, [C, D, E])
   └── LLM re-infers B-C → anchors_seen=[A, B], confidence=0.63
 
 Query B again → C appears as candidate
-  └── Check: B-C has 2 anchors (≥ threshold of 2)
-  └── Filter C → LLM(B, [D, E]) only
-  └── B-C not reinforced (threshold reached)
+  └── Check: B-C has 2 anchors (< threshold of 3)
+  └── Include C → LLM(B, [C, D, E, F])
+  └── LLM re-infers B-C → anchors_seen=[A, B, B], but B already seen → no change
+
+Query B third time → C appears as candidate
+  └── Check: B-C still has 2 distinct anchors (< threshold of 3)
+  └── Include C → Eventually third-party anchor will reinforce
 
 Query G → candidates [B, C]
   └── LLM(G, [B, C]) → LLM infers B-C
-  └── anchors_seen=[A, B, G], confidence=0.70 → ACTIVE
+  └── anchors_seen=[A, B, G], confidence=0.70 → ACTIVE (threshold reached)
 ```
 
 **Why This Design?**
