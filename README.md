@@ -130,6 +130,64 @@ What begins as a cold-start solution gradually becomes a reusable semantic asset
 
 ---
 
+## See It In Action
+
+Once the system is running (`make dev`), here's how to explore Adjacent's behavior:
+
+### 1. View Your Product Nodes in Neo4j
+
+Open the Neo4j Browser at [http://localhost:7475](http://localhost:7475) and run:
+
+```cypher
+MATCH (p:Product) RETURN p
+```
+
+You'll see your product catalog as disconnected nodes—no relationships yet.
+
+<img src="assets/examples/nodes_display_neo4j.png" alt="Product nodes in Neo4j" width="800">
+
+### 2. Query the API
+
+Open the FastAPI docs at [http://localhost:8000/docs](http://localhost:8000/docs). Navigate to the `/v1/query/{product_id}` endpoint:
+
+1. Pick a product ID from your catalog
+2. Set `top_k` (e.g., 10 recommendations)
+3. Click **Execute**
+
+<img src="assets/examples/fastapi_endpoint_display.png" alt="FastAPI endpoint" width="800">
+
+The API returns recommendations immediately using embeddings. Meanwhile, a background worker runs LLM inference to discover and materialize edges.
+
+### 3. Watch the Graph Evolve
+
+Go back to Neo4j and rerun the same Cypher query. After a few API calls, you'll see edges forming between products:
+
+<img src="assets/examples/formed_graph_in_neo4j_zoomed_out.png" alt="Graph forming - zoomed out" width="800">
+
+Zoom in to inspect the relationship types and structure:
+
+<img src="assets/examples/formed_graph_neo4j_zoomed_in.png" alt="Graph forming - zoomed in" width="800">
+
+Each edge represents an LLM-inferred relationship (`SIMILAR_TO`, `COMPLEMENTS`, etc.) that will be reinforced as more queries pass through.
+
+### 4. Monitor System Behavior in Grafana
+
+Open Grafana at [http://localhost:3000](http://localhost:3000) (admin/admin) to observe how the system evolves:
+
+**Graph Evolution** — Watch edges accumulate and transition from PROPOSED to ACTIVE:
+
+<img src="assets/examples/grafana_graph_evolution_viz.png" alt="Graph evolution metrics" width="800">
+
+**Query & LLM Latency** — See how latency decreases over time as the graph matures and fewer LLM calls are needed:
+
+<img src="assets/examples/grafana_query_and_llm_latency_viz.png" alt="Query and LLM latency" width="800">
+
+**Token Economics** — Track LLM token usage and observe how it amortizes as the graph becomes self-sufficient:
+
+<img src="assets/examples/grafana_token_usage_over_time.png" alt="Token usage over time" width="800">
+
+---
+
 ## Core Idea
 
 Adjacent builds recommendations in three layers:
