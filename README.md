@@ -174,7 +174,7 @@ Each edge represents an LLM-inferred relationship (`SIMILAR_TO`, `COMPLEMENTS`, 
 
 Open Grafana at [http://localhost:3000](http://localhost:3000) (admin/admin) to observe how the system evolves:
 
-**Graph Evolution** - Watch edges accumulate and transition from PROPOSED to ACTIVE:
+**Graph Evolution** - Watch retrieval transition from vector-to-graph based:
 
 <img src="assets/examples/grafana_graph_evolution_viz.png" alt="Graph evolution metrics" width="800">
 
