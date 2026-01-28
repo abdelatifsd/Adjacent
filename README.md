@@ -112,19 +112,26 @@ Most recommendation systems assume you already have:
 
 But many catalogs start with none of that.
 
-Adjacent addresses a different problem:
+Adjacent explores a different question:
 
-> How can a system start with only a catalog, produce useful recommendations early, and become cheaper and more reliable as it is used?
+> Can we build useful recommendation structure starting only from a catalog and make it cheaper, faster, and more reliable as the system is used?
 
-Instead of committing to a heavy offline pipeline or permanent LLM inference, Adjacent is designed to transition:
+### The Core Idea
 
-- from semantic similarity (embeddings),
-- to selective LLM inference,
-- to fast, graph-native recommendations.
+Instead of committing to heavy offline pipelines or permanent LLM inference, Adjacent is designed to transition from vector-heavy to graph-native recommendations.
 
-This is enabled by asynchronous graph construction: queries return immediately using existing graph structure and embeddings, while background workers run LLM inference and materialize new edges. Users never wait for graph enrichment.
+- **Embeddings** provide the initial signal
+- **LLMs** infer relationships asynchronously, only where needed
+- A **knowledge graph** is built lazily, anchored to real queries
 
-The graph is built lazily, only where queries demand it. As structure accumulates, reliance on inference decreases, latency drops, and cost amortizes over time.
+**LLM inference is not part of the serving path.** It is used only to construct and reinforce structure.
+
+Once a product's local graph becomes sufficiently dense, queries for that product rely purely on graph-based retrieval — no inference, lower latency, lower cost.
+
+**As the graph matures:**
+- LLM calls drop
+- Latency improves
+- Cost amortizes naturally
 
 What begins as a cold-start solution gradually becomes a reusable semantic asset: one that supports recommendations first, then broader reasoning and analysis as the graph matures.
 
@@ -185,18 +192,6 @@ Open Grafana at [http://localhost:3000](http://localhost:3000) (admin/admin) to 
 **Token Economics** - Track LLM token usage and observe how it amortizes as the graph becomes self-sufficient:
 
 <img src="assets/examples/grafana_token_usage_over_time.png" alt="Token usage over time" width="800">
-
----
-
-## Core Idea
-
-Adjacent builds recommendations in three layers:
-
-1. **Semantic similarity** (embeddings)
-2. **LLM-inferred relationships** (typed edges)
-3. **A lazily constructed graph** that grows only when queried
-
-Instead of building a massive graph ahead of time, the graph is constructed on demand, anchored to actual queries.
 
 ---
 
