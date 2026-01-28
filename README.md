@@ -174,15 +174,15 @@ Each edge represents an LLM-inferred relationship (`SIMILAR_TO`, `COMPLEMENTS`, 
 
 Open Grafana at [http://localhost:3000](http://localhost:3000) (admin/admin) to observe how the system evolves:
 
-**Graph Evolution** — Watch edges accumulate and transition from PROPOSED to ACTIVE:
+**Graph Evolution** - Watch edges accumulate and transition from PROPOSED to ACTIVE:
 
 <img src="assets/examples/grafana_graph_evolution_viz.png" alt="Graph evolution metrics" width="800">
 
-**Query & LLM Latency** — See how latency decreases over time as the graph matures and fewer LLM calls are needed:
+**Query & LLM Latency** - See how latency decreases over time as the graph matures and fewer LLM calls are needed:
 
 <img src="assets/examples/grafana_query_and_llm_latency_viz.png" alt="Query and LLM latency" width="800">
 
-**Token Economics** — Track LLM token usage and observe how it amortizes as the graph becomes self-sufficient:
+**Token Economics** - Track LLM token usage and observe how it amortizes as the graph becomes self-sufficient:
 
 <img src="assets/examples/grafana_token_usage_over_time.png" alt="Token usage over time" width="800">
 
