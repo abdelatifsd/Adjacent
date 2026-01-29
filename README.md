@@ -12,7 +12,13 @@ Adjacent is an open-source experimentation framework for building cold-start rec
 
 ## Demo Video
 
-**[▶️ Watch the full demo walkthrough on Loom](https://www.loom.com/share/018c20b00b84470da28c89616f870a76)**
+<div align="center">
+
+<iframe width="640" height="360" src="https://www.loom.com/embed/018c20b00b84470da28c89616f870a76" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen></iframe>
+
+*Watch in-page above, or [open on Loom](https://www.loom.com/share/018c20b00b84470da28c89616f870a76)*
+
+</div>
 
 In this demo, you'll see:
 
