@@ -214,7 +214,7 @@ This keeps the system:
 - An anchor is the product that triggered inference
 - Edges are reinforced only when they appear under **distinct anchors**
 
-This avoids hallucinated certainty from a single LLM call.
+This reduces reliance on single-shot LLM inference
 
 ### 3. Deterministic Where Possible, LLM Only Where Necessary
 
@@ -584,7 +584,7 @@ As the graph grows, it encodes higher-order structure that can be reused. Node e
 
 The following features and improvements are planned for future versions:
 
-- [ ] **Grafana Visualizations** - Add more dashboards and panels in Grafana using the metrics provided (query latency, inference counts, graph vs vector mix, etc.)
+- [x] **Grafana Visualizations** - Add more dashboards and panels in Grafana using the metrics provided (query latency, inference counts, graph vs vector mix, etc.)
 - [ ] **MCP Integration** - Implement Model Context Protocol server to enable LLM agents to query and reason over the knowledge graph directly
 - [ ] **Evaluation Framework** - Build a validation system for assessing edge quality, including meta-evaluation agents and dataset-specific validation heuristics
 - [ ] **Rate Limiting & Authentication** - Add production-grade API hardening with rate limiting, authentication, and request throttling
