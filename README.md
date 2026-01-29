@@ -6,7 +6,7 @@
 
 <br />
 
-Adjacent is an open-source experimentation framework for building cold-start recommendation systems without behavioral data. It transforms a raw product catalog into a semantic, graph-based recommendation engine using embeddings, LLM inference, and a lazily constructed knowledge graph.
+Adjacent is an open-source framework for cold-start recommendation and graph discovery. It enables teams to build recommendation structure from a catalog alone, while observing how semantic graphs emerge and mature through real usage.
 
 ---
 
