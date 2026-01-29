@@ -10,6 +10,21 @@ Adjacent is an open-source experimentation framework for building cold-start rec
 
 ---
 
+## Demo Video
+
+**[▶️ Watch the full demo walkthrough on Loom](https://www.loom.com/share/018c20b00b84470da28c89616f870a76)**
+
+In this demo, you'll see:
+
+- Live recommendation queries via the API
+- How repeated queries trigger lazy graph construction
+- The resulting structure in Neo4j as edges accumulate
+- How latency and inference behavior change over time in Grafana
+
+The demo is intentionally light on implementation details and focuses on illustrating the system's behavior and dynamics. Setup and architecture are covered elsewhere in the documentation.
+
+---
+
 ## Quick Start
 
 Get Adjacent running in 5 minutes:
@@ -143,23 +158,6 @@ Adjacent is designed around the hypothesis that:
 3. Edge reuse across products amortizes inference cost
 
 Initial testing on product catalogs confirms these patterns, but large-scale validation remains open research.
-
----
-
-## Demo Video
-
-Watch a complete walkthrough of Adjacent's cold-start recommendation system:
-
-[![Adjacent Demo: Cold-Start Recommendations via Lazy Graph Construction](https://cdn.loom.com/sessions/thumbnails/018c20b00b84470da28c89616f870a76-with-play.gif)](https://www.loom.com/share/018c20b00b84470da28c89616f870a76)
-
-In this demo, you'll see:
-
-- Live recommendation queries via the API
-- How repeated queries trigger lazy graph construction
-- The resulting structure in Neo4j as edges accumulate
-- How latency and inference behavior change over time in Grafana
-
-The demo is intentionally light on implementation details and focuses on illustrating the system's behavior and dynamics. Setup and architecture are covered elsewhere in the documentation.
 
 ---
 
