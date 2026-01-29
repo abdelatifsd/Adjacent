@@ -126,7 +126,7 @@ Instead of committing to heavy offline pipelines or permanent LLM inference, Adj
 
 **LLM inference is not part of the serving path.** It is used only to construct and reinforce structure.
 
-Once a product's local graph becomes sufficiently dense, queries for that product rely purely on graph-based retrieval — no inference, lower latency, lower cost.
+Once a product's local graph becomes sufficiently dense, queries for that product rely purely on graph-based retrieval. Meaning, no LLM inference, lower latency, and lower cost.
 
 **As the graph matures:**
 - LLM calls drop
