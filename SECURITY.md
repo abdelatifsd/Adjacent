@@ -6,7 +6,7 @@ If you discover a security vulnerability in Adjacent, please report it responsib
 
 **Do not open a public issue.** Instead, contact us privately:
 
-- Email: `TODO — add security contact email`
+- Email: `abdulatifsal@gmail.com`
 - Or use [GitHub's private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) if enabled on this repository.
 
 Please include:
