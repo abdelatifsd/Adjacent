@@ -135,6 +135,15 @@ Once a product's local graph becomes sufficiently dense, queries for that produc
 
 What begins as a cold-start solution gradually becomes a reusable semantic asset: one that supports recommendations first, then broader reasoning and analysis as the graph matures.
 
+### Design Rationale
+
+Adjacent is designed around the hypothesis that:
+1. Graph queries become faster and cheaper than repeated embedding+LLM inference
+2. Real query demand naturally builds useful structure
+3. Edge reuse across products amortizes inference cost
+
+Initial testing on product catalogs confirms these patterns, but large-scale validation remains open research.
+
 ---
 
 ## See It In Action
