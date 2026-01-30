@@ -41,7 +41,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "sum_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_graph [$__range])",
+          "expr": "sum_over_time({job=\"$job\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_graph [$__range])",
           "instant": true,
           "legendFormat": "",
           "queryType": "instant",
@@ -77,7 +77,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "sum_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_vector [$__range])",
+          "expr": "sum_over_time({job=\"$job\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_vector [$__range])",
           "instant": true,
           "legendFormat": "",
           "queryType": "instant",
@@ -156,7 +156,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_candidates_enqueued [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"$job\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_candidates_enqueued [$__range])",
           "instant": true,
           "legendFormat": "",
           "queryType": "instant",
@@ -200,7 +200,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "count_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` [$__range])",
+          "expr": "count_over_time({job=\"$job\"} |~ `\"span\":\"query_total\"` [$__range])",
           "instant": true,
           "legendFormat": "",
           "queryType": "instant",
@@ -243,7 +243,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap duration_ms [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"$job\"} |~ `\"span\":\"query_total\"` | json | unwrap duration_ms [$__range])",
           "instant": true,
           "legendFormat": "",
           "queryType": "instant",
@@ -416,7 +416,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap duration_ms [1m])",
+          "expr": "quantile_over_time(0.5, {job=\"$job\"} |~ `\"span\":\"query_total\"` | json | unwrap duration_ms [1m])",
           "legendFormat": "{{Value}} ms",
           "queryType": "range",
           "refId": "A"
@@ -617,7 +617,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "sum_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_graph [$__interval])",
+          "expr": "sum_over_time({job=\"$job\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_graph [$__interval])",
           "legendFormat": "Graph",
           "queryType": "range",
           "refId": "A"
@@ -625,7 +625,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "sum_over_time({job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_vector [$__interval])",
+          "expr": "sum_over_time({job=\"$job\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_from_vector [$__interval])",
           "legendFormat": "Vector",
           "queryType": "range",
           "refId": "B"
@@ -844,7 +844,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_candidates_enqueued [$__interval])",
+          "expr": "quantile_over_time(0.5, {job=\"$job\"} |~ `\"span\":\"query_total\"` | json | unwrap counts_candidates_enqueued [$__interval])",
           "legendFormat": "Candidates/Query",
           "queryType": "range",
           "refId": "A"
@@ -905,7 +905,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"graph_neighbors\"` | json | unwrap duration_ms [$__interval])",
+          "expr": "quantile_over_time(0.5, {job=\"$job\"} |~ `\"span\":\"graph_neighbors\"` | json | unwrap duration_ms [$__interval])",
           "legendFormat": "Graph Lookup",
           "queryType": "range",
           "refId": "A"
@@ -913,7 +913,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"vector_search\"` | json | unwrap duration_ms [$__interval])",
+          "expr": "quantile_over_time(0.5, {job=\"$job\"} |~ `\"span\":\"vector_search\"` | json | unwrap duration_ms [$__interval])",
           "legendFormat": "Vector Search",
           "queryType": "range",
           "refId": "B"
@@ -921,7 +921,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "quantile_over_time(0.5, {job=\"api\"} |~ `\"span\":\"fetch_anchor\"` | json | unwrap duration_ms [$__interval])",
+          "expr": "quantile_over_time(0.5, {job=\"$job\"} |~ `\"span\":\"fetch_anchor\"` | json | unwrap duration_ms [$__interval])",
           "legendFormat": "Fetch Anchor",
           "queryType": "range",
           "refId": "C"
@@ -1150,7 +1150,27 @@
   "schemaVersion": 38,
   "style": "dark",
   "tags": ["adjacent"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "api", "value": "api" },
+        "description": "Log source: api (production) or simulation",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Job",
+        "multi": false,
+        "name": "job",
+        "options": [
+          { "selected": true, "text": "api", "value": "api" },
+          { "selected": false, "text": "simulation", "value": "simulation" }
+        ],
+        "query": "api,simulation",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
+  },
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "",

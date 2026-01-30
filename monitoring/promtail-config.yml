@@ -30,3 +30,21 @@ scrape_configs:
         labels:
           job: worker
           __path__: /var/log/adjacent/worker.log
+
+  # Simulation logs - tail simulation.log so Grafana shows data when LokiHandler push
+  # from host fails (e.g. simulation run on host, Loki in Docker). Pipeline uses JSON
+  # timestamp so points are spaced by event time, not ingestion time.
+  - job_name: simulation
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: simulation
+          __path__: /var/log/adjacent/simulation.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+      - timestamp:
+          source: timestamp
+          format: RFC3339
