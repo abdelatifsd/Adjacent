@@ -83,7 +83,7 @@ dev-clean:
 # Clean logs
 dev-clean-logs:
 	@echo "🧹 Cleaning logs..."
-	@rm -f logs/api.log logs/worker.log
+	@rm -f logs/api.log logs/worker.log logs/simulation.log
 
 # ===========================================
 # Local Setup (for native Python development)
