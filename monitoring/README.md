@@ -43,21 +43,22 @@ This directory contains the configuration for Adjacent's observability stack: **
      - `LOKI_JOB`: Job label (default: `api` for API, `worker` for workers)
      - `LOKI_ENABLED`: Enable/disable Loki handler (default: `true`)
 
-3. **Promtail** (port 9080) - *Optional/Deprecated*
-   - Previously used for file tailing
-   - No longer required for metrics (logs push directly to Loki)
-   - May still be used for other log sources if needed
+3. **Promtail** (port 9080)
+   - Tails `logs/api.log`, `logs/worker.log`, and `logs/simulation.log` and sends them to Loki.
+   - Primary metrics still come from direct HTTP push (LokiHandler); Promtail provides a backup path and is required for **simulation** when the script runs on the host (direct push to Loki in Docker may not reach).
+   - Simulation job uses a pipeline that extracts the JSON `timestamp` field so event time is correct (not ingestion time).
    - Config: [promtail-config.yml](promtail-config.yml)
 
-3. **Loki** (port 3100)
+4. **Loki** (port 3100)
    - Stores and indexes logs
    - Provides LogQL query API
    - Persists data to Docker volume `loki-data`
    - Config: [loki-config.yml](loki-config.yml)
 
-4. **Grafana** (port 3000)
+5. **Grafana** (port 3000)
    - Visualizes metrics from Loki
-   - Pre-configured dashboard: "Adjacent Metrics"
+   - Pre-configured dashboard: "Adjacent Metrics" with a **Job** variable (`$job`) to switch between `api` (production) and `simulation`
+   - Worker panels (LLM Calls, Token Usage, etc.) always show `job="worker"` (all worker activity); query/graph/vector panels use `$job`
    - Credentials: `admin` / `admin`
    - Dashboard: [grafana/provisioning/dashboards/adjacent-metrics.json](grafana/provisioning/dashboards/adjacent-metrics.json)
 
@@ -245,6 +246,9 @@ Access Loki directly or via Grafana Explore (http://localhost:3000/explore):
 ```logql
 # All API logs
 {job="api"}
+
+# Simulation logs (from simulate/v1_random_sample)
+{job="simulation"}
 
 # Only structured metric logs (with span)
 {job="api", span!=""}

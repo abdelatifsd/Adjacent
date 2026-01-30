@@ -129,7 +129,7 @@ Each line is a JSON object:
 
 ### How It Works
 
-The simulation pushes metrics **directly to Loki** using the same `LokiHandler` and `commons.metrics` infrastructure as the API and Worker. It emits the same span names (`query_total`) and counts (`from_graph`, `from_vector`) as production, differentiated only by the Loki `job` label:
+The simulation uses the same `LokiHandler` and `commons.metrics` infrastructure as the API and Worker. It also writes to `logs/simulation.log`; **Promtail** tails that file and sends it to Loki with `job="simulation"` (using a pipeline that sets event time from the JSON `timestamp` field so points are spaced correctly). It emits the same span names (`query_total`) and counts (`from_graph`, `from_vector`) as production, differentiated only by the Loki `job` label:
 
 - **Production**: `job="api"` / `job="worker"`
 - **Simulation**: `job="simulation"`
@@ -143,7 +143,7 @@ This means the **existing "Adjacent Metrics" dashboard** works for both producti
 3. Use the **Job** dropdown at the top to select `simulation`
 4. Adjust the time range to cover your simulation run
 
-Worker panels (LLM Calls, Token Usage, Edge Lifecycle, etc.) will be empty when viewing simulation data — those metrics always come from the `worker` job regardless of traffic source.
+Worker panels (LLM Calls, Token Usage, Edge Lifecycle, etc.) show **all** worker activity regardless of job selection — they use `job="worker"` (not `$job`), so you see LLM metrics for both simulation-triggered and other API traffic when viewing simulation.
 
 ### Additional Metrics
 
@@ -162,9 +162,7 @@ These can be queried in Grafana Explore with `{job="simulation"} | json | operat
 
 The experiment works seamlessly with Adjacent's monitoring stack:
 
-1. **Grafana**: View metrics at `http://localhost:3000` — select `simulation` in the Job dropdown
-2. **No separate dashboard needed** — the same auto-provisioned dashboard handles both production and simulation
-
+1. **Grafana**: View metrics at `http://localhost:3000` — select `simulation` in the Job dropdown (no separate dashboard needed).
 2. **Neo4j Browser**: Inspect graph state at `http://localhost:7475`
    ```cypher
    // See products queried in this experiment
@@ -179,7 +177,7 @@ The experiment works seamlessly with Adjacent's monitoring stack:
    RETURN related.id, e.edge_type, e.confidence, e.anchors_seen;
    ```
 
-3. **RQ Dashboard**: Check inference job queue at `http://localhost:9181` (if rq-dashboard installed)
+3. **RQ Dashboard**: Check inference job queue at `http://localhost:9181` (if rq-dashboard is installed)
 
 ## Next Steps
 

@@ -75,6 +75,14 @@ make dev-down      # Stop all services
 make dev-clean     # Clean everything (removes volumes)
 ```
 
+**Run the simulation** (traffic experiment; see [simulate/v1_random_sample/README.md](simulate/v1_random_sample/README.md)):
+
+```bash
+python simulate/v1_random_sample/run.py
+```
+
+In Grafana, select **Job → simulation** to view simulation metrics.
+
 ### First Query
 
 ```bash
