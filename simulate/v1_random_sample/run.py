@@ -36,11 +36,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from commons.loki_handler import LokiHandler
 from commons.metrics import span, emit_counter, generate_trace_id
 
-DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "demo" / "kaggle_ecommerce.json"
+DATA_PATH = (
+    Path(__file__).resolve().parents[2] / "data" / "demo" / "kaggle_ecommerce.json"
+)
 DEFAULT_API = "http://localhost:8000"
 
 
-def configure_simulation_logger(run_id: str, loki_enabled: bool = True) -> logging.Logger:
+def configure_simulation_logger(
+    run_id: str, loki_enabled: bool = True
+) -> logging.Logger:
     """
     Configure logger for simulation metrics.
 
@@ -92,7 +96,9 @@ def load_product_ids(path: Path) -> list[str]:
     return [p["id"] for p in products]
 
 
-def query_product(client: httpx.Client, base: str, product_id: str, top_k: int = 10) -> dict:
+def query_product(
+    client: httpx.Client, base: str, product_id: str, top_k: int = 10
+) -> dict:
     url = f"{base}/v1/perf/query/{product_id}"
     resp = client.get(url, params={"top_k": top_k}, timeout=30)
     resp.raise_for_status()
@@ -154,7 +160,7 @@ def run_experiment(
     schedule = generate_weighted_schedule(sampled, total_queries, alpha)
     query_distribution = Counter(schedule)
 
-    print(f"=== v1_random_sample experiment ===")
+    print("=== v1_random_sample experiment ===")
     print(f"Run ID: {run_id}")
     print(f"Sampled {len(sampled)} products")
     print(f"Total queries: {total_queries}")
@@ -167,11 +173,46 @@ def run_experiment(
     print()
 
     # Emit experiment config as counters
-    emit_counter("num_products", num_products, operation="simulation", trace_id=run_id, logger=logger, run_id=run_id)
-    emit_counter("total_queries", total_queries, operation="simulation", trace_id=run_id, logger=logger, run_id=run_id)
-    emit_counter("alpha", alpha, operation="simulation", trace_id=run_id, logger=logger, run_id=run_id)
-    emit_counter("min_delay", min_delay, operation="simulation", trace_id=run_id, logger=logger, run_id=run_id)
-    emit_counter("max_delay", max_delay, operation="simulation", trace_id=run_id, logger=logger, run_id=run_id)
+    emit_counter(
+        "num_products",
+        num_products,
+        operation="simulation",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+    )
+    emit_counter(
+        "total_queries",
+        total_queries,
+        operation="simulation",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+    )
+    emit_counter(
+        "alpha",
+        alpha,
+        operation="simulation",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+    )
+    emit_counter(
+        "min_delay",
+        min_delay,
+        operation="simulation",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+    )
+    emit_counter(
+        "max_delay",
+        max_delay,
+        operation="simulation",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+    )
 
     log: list[dict] = []
     product_query_counts = {pid: 0 for pid in sampled}
@@ -244,65 +285,174 @@ def run_experiment(
 
     # Hot vs cold products (top 20% vs bottom 80%)
     top_20_percent_count = max(1, len(sampled) // 5)
-    hot_products = set([pid for pid, _ in query_distribution.most_common(top_20_percent_count)])
+    hot_products = set(
+        [pid for pid, _ in query_distribution.most_common(top_20_percent_count)]
+    )
     hot_entries = [e for e in log if e["product_id"] in hot_products]
     cold_entries = [e for e in log if e["product_id"] not in hot_products]
 
     # Emit summary metrics
-    avg_graph = avg(log, 'from_graph')
-    avg_vector = avg(log, 'from_vector')
-    avg_latency = avg(log, 'latency_ms')
+    avg_graph = avg(log, "from_graph")
+    avg_vector = avg(log, "from_vector")
+    avg_latency = avg(log, "latency_ms")
 
-    emit_counter("avg_from_graph", avg_graph, operation="simulation_summary", trace_id=run_id, logger=logger, run_id=run_id)
-    emit_counter("avg_from_vector", avg_vector, operation="simulation_summary", trace_id=run_id, logger=logger, run_id=run_id)
-    emit_counter("avg_latency_ms", avg_latency, operation="simulation_summary", trace_id=run_id, logger=logger, run_id=run_id)
+    emit_counter(
+        "avg_from_graph",
+        avg_graph,
+        operation="simulation_summary",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+    )
+    emit_counter(
+        "avg_from_vector",
+        avg_vector,
+        operation="simulation_summary",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+    )
+    emit_counter(
+        "avg_latency_ms",
+        avg_latency,
+        operation="simulation_summary",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+    )
 
     # Emit hot vs cold metrics
-    emit_counter("hot_avg_from_graph", avg(hot_entries, 'from_graph'), operation="simulation_summary", trace_id=run_id, logger=logger, run_id=run_id, segment="hot")
-    emit_counter("hot_avg_from_vector", avg(hot_entries, 'from_vector'), operation="simulation_summary", trace_id=run_id, logger=logger, run_id=run_id, segment="hot")
-    emit_counter("cold_avg_from_graph", avg(cold_entries, 'from_graph'), operation="simulation_summary", trace_id=run_id, logger=logger, run_id=run_id, segment="cold")
-    emit_counter("cold_avg_from_vector", avg(cold_entries, 'from_vector'), operation="simulation_summary", trace_id=run_id, logger=logger, run_id=run_id, segment="cold")
+    emit_counter(
+        "hot_avg_from_graph",
+        avg(hot_entries, "from_graph"),
+        operation="simulation_summary",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+        segment="hot",
+    )
+    emit_counter(
+        "hot_avg_from_vector",
+        avg(hot_entries, "from_vector"),
+        operation="simulation_summary",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+        segment="hot",
+    )
+    emit_counter(
+        "cold_avg_from_graph",
+        avg(cold_entries, "from_graph"),
+        operation="simulation_summary",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+        segment="cold",
+    )
+    emit_counter(
+        "cold_avg_from_vector",
+        avg(cold_entries, "from_vector"),
+        operation="simulation_summary",
+        trace_id=run_id,
+        logger=logger,
+        run_id=run_id,
+        segment="cold",
+    )
 
     print("\n=== Summary ===")
     print(f"Run ID: {run_id}")
     print(f"Total queries: {len(log)}")
     print(f"Products sampled: {len(sampled)}")
-    print(f"Overall avg: graph={avg_graph:.1f}  vector={avg_vector:.1f}  latency={avg_latency:.0f}ms")
+    print(
+        f"Overall avg: graph={avg_graph:.1f}  vector={avg_vector:.1f}  latency={avg_latency:.0f}ms"
+    )
     print()
     print("By query number (showing progression from cold to warm):")
     for qn in sorted(by_query_num.keys())[:10]:  # Show first 10 rounds
         entries = by_query_num[qn]
-        qn_avg_graph = avg(entries, 'from_graph')
-        qn_avg_vector = avg(entries, 'from_vector')
-        print(f"  Query #{qn}: avg graph={qn_avg_graph:.1f}  avg vector={qn_avg_vector:.1f}  count={len(entries)}")
+        qn_avg_graph = avg(entries, "from_graph")
+        qn_avg_vector = avg(entries, "from_vector")
+        print(
+            f"  Query #{qn}: avg graph={qn_avg_graph:.1f}  avg vector={qn_avg_vector:.1f}  count={len(entries)}"
+        )
 
         # Emit per-query-number metrics
-        emit_counter(f"query_num_{qn}_avg_from_graph", qn_avg_graph, operation="simulation_progression", trace_id=run_id, logger=logger, run_id=run_id, query_num=qn)
-        emit_counter(f"query_num_{qn}_avg_from_vector", qn_avg_vector, operation="simulation_progression", trace_id=run_id, logger=logger, run_id=run_id, query_num=qn)
+        emit_counter(
+            f"query_num_{qn}_avg_from_graph",
+            qn_avg_graph,
+            operation="simulation_progression",
+            trace_id=run_id,
+            logger=logger,
+            run_id=run_id,
+            query_num=qn,
+        )
+        emit_counter(
+            f"query_num_{qn}_avg_from_vector",
+            qn_avg_vector,
+            operation="simulation_progression",
+            trace_id=run_id,
+            logger=logger,
+            run_id=run_id,
+            query_num=qn,
+        )
 
     print()
     print("Hot products (top 20%) vs. Cold products (bottom 80%):")
-    print(f"  Hot:  avg graph={avg(hot_entries, 'from_graph'):.1f}  avg vector={avg(hot_entries, 'from_vector'):.1f}  queries={len(hot_entries)}")
-    print(f"  Cold: avg graph={avg(cold_entries, 'from_graph'):.1f}  avg vector={avg(cold_entries, 'from_vector'):.1f}  queries={len(cold_entries)}")
+    print(
+        f"  Hot:  avg graph={avg(hot_entries, 'from_graph'):.1f}  avg vector={avg(hot_entries, 'from_vector'):.1f}  queries={len(hot_entries)}"
+    )
+    print(
+        f"  Cold: avg graph={avg(cold_entries, 'from_graph'):.1f}  avg vector={avg(cold_entries, 'from_vector'):.1f}  queries={len(cold_entries)}"
+    )
 
     # Flush logger to ensure all metrics are pushed
     for handler in logger.handlers:
         handler.flush()
 
     print(f"\nMetrics pushed to Loki (run_id={run_id})")
-    print(f"View in Grafana: http://localhost:3000 (filter by job=simulation, run_id={run_id})")
+    print(
+        f"View in Grafana: http://localhost:3000 (filter by job=simulation, run_id={run_id})"
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description="v1_random_sample experiment")
     parser.add_argument("--api", default=DEFAULT_API, help="API base URL")
-    parser.add_argument("--products", type=int, default=12, help="Number of products to sample (10-15)")
-    parser.add_argument("--total-queries", type=int, default=10, help="Total number of queries to execute")
-    parser.add_argument("--min-delay", type=float, default=2.0, help="Min delay between queries (seconds)")
-    parser.add_argument("--max-delay", type=float, default=5.0, help="Max delay between queries (seconds)")
-    parser.add_argument("--top-k", type=int, default=10, help="Top-K recommendations per query")
-    parser.add_argument("--alpha", type=float, default=1.2, help="Power-law exponent (1.0-2.0, higher = more skewed)")
-    parser.add_argument("--no-loki", action="store_true", help="Disable Loki metrics push (file-only logging)")
+    parser.add_argument(
+        "--products", type=int, default=12, help="Number of products to sample (10-15)"
+    )
+    parser.add_argument(
+        "--total-queries",
+        type=int,
+        default=10,
+        help="Total number of queries to execute",
+    )
+    parser.add_argument(
+        "--min-delay",
+        type=float,
+        default=2.0,
+        help="Min delay between queries (seconds)",
+    )
+    parser.add_argument(
+        "--max-delay",
+        type=float,
+        default=5.0,
+        help="Max delay between queries (seconds)",
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=10, help="Top-K recommendations per query"
+    )
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=1.2,
+        help="Power-law exponent (1.0-2.0, higher = more skewed)",
+    )
+    parser.add_argument(
+        "--no-loki",
+        action="store_true",
+        help="Disable Loki metrics push (file-only logging)",
+    )
     args = parser.parse_args()
 
     run_experiment(
