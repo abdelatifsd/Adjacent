@@ -60,9 +60,11 @@ Tools need access to `QueryService` and `Neo4jContext`. These are created in `ru
 
 ```
 src/adjacent/mcp/
-├── __init__.py    # Package docstring; run via python -m adjacent.mcp.server
-├── config.py      # get_config() -> AsyncConfig from env
-└── server.py      # FastMCP app, tools, prompt, run_server(), __main__
+├── __init__.py                          # Package docstring; run via python -m adjacent.mcp.server
+├── config.py                            # get_config() -> AsyncConfig from env
+├── server.py                            # FastMCP app, tools, prompt, run_server(), __main__
+├── README.md                            # This file
+└── claude_desktop_config.example.json   # Copy to Claude config; replace path
 ```
 
 ### Dependencies
@@ -81,9 +83,14 @@ src/adjacent/mcp/
 - **Tools:**
   - **`get_product(product_id: str)`** — Fetches a product by ID via `Neo4jContext.fetch_product()`. Raises `ValueError` if not found.
   - **`get_product_recommendations(product_id: str, top_k: int = 10)`** — Returns recommendations via `QueryService.query(..., skip_inference=True)`. `top_k` is clamped to 1–100.
+  - **`get_products_by_edge_count(limit: int = 20)`** — Returns products ordered by number of RECOMMENDATION edges (most connected first). Returns list of `{product_id, edge_count}`; `limit` clamped to 1–500.
 - **Prompt:**
   - **`find_recommendations(product_id: str)`** — Returns a short instruction string telling the LLM to call the two tools and then summarize and explain the recommendations.
 - **Entrypoint:** `if __name__ == "__main__": run_server()` so the server is run as `python -m adjacent.mcp.server`.
+
+### Neo4j result serialization (data layer, not MCP-specific)
+
+Product and edge data returned by `fetch_product`, `fetch_products`, `get_edge`, and `get_neighbors` is made JSON-serializable by the shared **`adjacent.db.serialization`** module (Neo4j temporal types → ISO strings). That logic lives in `adjacent.db` and `adjacent.stores.neo4j_edge_store`; the MCP server uses it indirectly via `Neo4jContext` and `QueryService`. The same sanitization applies to the REST API and any other consumer of those methods.
 
 ### Running the server
 
@@ -119,49 +126,20 @@ The process reads/writes MCP on stdin/stdout and logs to stderr. It runs until t
 
 Create the file if it does not exist. It must be valid JSON.
 
-### 3. Add the MCP server
+### 3. Use the provided config artifact (recommended)
 
-Add an entry under `mcpServers` with the **absolute path** to the Adjacent repo as `cwd` so that `uv run` and imports resolve correctly.
+This directory includes a **working** Claude Desktop config that has been debugged and tested:
 
-**Example (macOS, using `uv`):**
+- **File:** `claude_desktop_config.example.json`
 
-```json
-{
-  "mcpServers": {
-    "adjacent-kg": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "adjacent.mcp.server"],
-      "cwd": "/Users/you/path/to/adjacent",
-      "env": {
-        "NEO4J_URI": "bolt://localhost:7688",
-        "NEO4J_USER": "neo4j",
-        "NEO4J_PASSWORD": "adjacent123"
-      }
-    }
-  }
-}
-```
+**Steps:**
 
-**Example (system Python, venv already activated not applicable — Claude runs a new process):**
+1. Copy the contents of `claude_desktop_config.example.json` into your Claude Desktop config file (see locations above). If you already have other MCP servers, merge the `mcpServers` entry for `adjacent-kg` into your existing config.
+2. Replace **every** `/path/to/adjacent` with your **absolute path** to the Adjacent repo (e.g. `/Users/you/Desktop/adjacent`). There are two places: `command` (venv Python) and `cwd`.
+3. Optionally adjust `env` (NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) if your Neo4j uses different credentials.
+4. Save the file, then **fully quit and reopen Claude Desktop**.
 
-```json
-{
-  "mcpServers": {
-    "adjacent-kg": {
-      "command": "/path/to/adjacent/.venv/bin/python",
-      "args": ["-m", "adjacent.mcp.server"],
-      "cwd": "/path/to/adjacent",
-      "env": {
-        "NEO4J_URI": "bolt://localhost:7688",
-        "NEO4J_USER": "neo4j",
-        "NEO4J_PASSWORD": "adjacent123"
-      }
-    }
-  }
-}
-```
-
-Adjust `cwd` and `env` to your machine and environment. If you omit `env`, the server will use the same defaults as in `config.py` (and any env vars already set in your shell are not inherited by Claude’s subprocess unless you set them in `env`).
+This config uses the project’s **venv Python** (`/path/to/adjacent/.venv/bin/python`) and **only** the args `["-m", "adjacent.mcp.server"]`, which avoids PATH and pyenv issues when Claude spawns the subprocess.
 
 ### 4. Restart Claude Desktop
 
@@ -169,11 +147,12 @@ Fully quit Claude Desktop and reopen it so it reloads the config and starts the 
 
 ### 5. Using the server in a conversation
 
-- Claude will list available tools (e.g. **adjacent-kg** with `get_product` and `get_product_recommendations`) when relevant.
+- Claude will list available tools (e.g. **adjacent-kg** with `get_product`, `get_product_recommendations`, `get_products_by_edge_count`) when relevant.
 - You can ask things like:
   - “Get product X and its recommendations from the Adjacent graph.”
   - “Use the adjacent-kg tools to find recommendations for product ID abc123 and explain them.”
-- You can use the **find_recommendations** prompt (if your client exposes prompts) by providing a product ID; Claude will receive the instruction template and can then call the two tools and summarize.
+  - “Which products have the most recommendation edges?”
+- You can use the **find_recommendations** prompt (if your client exposes prompts) by providing a product ID; Claude will receive the instruction template and can then call the tools and summarize.
 
 If the server fails to start, check Claude Desktop’s logs (or run `uv run python -m adjacent.mcp.server` in a terminal and watch stderr) and verify Neo4j/Redis and `cwd`/`env`.
 
@@ -182,15 +161,14 @@ If the server fails to start, check Claude Desktop’s logs (or run `uv run pyth
 | Step | Action |
 |------|--------|
 | 1 | Neo4j and Redis running; env set or defaults OK |
-| 2 | Open `claude_desktop_config.json` for your OS |
-| 3 | Add `mcpServers.adjacent-kg` with `command`, `args`, `cwd`, and `env` |
-| 4 | Use absolute path for `cwd` |
-| 5 | Fully restart Claude Desktop |
-| 6 | Start a new conversation and ask for product/recommendations using the tools |
+| 2 | Copy `claude_desktop_config.example.json` into Claude config (or merge `adjacent-kg` into existing config) |
+| 3 | Replace `/path/to/adjacent` with your repo path in `command` and `cwd` |
+| 4 | Save config; fully restart Claude Desktop |
+| 5 | Start a new conversation and ask for product/recommendations or top products by edge count |
 
 ---
 
 ## See also
 
 - **`docs/mcp_assessment.md`** — Broader MCP plan, optional tools/resources, and phased rollout.
-- **`src/adjacent/mcp/server.py`** — Inline comment block at the bottom with a compact Claude Desktop config example.
+- **`server.py`** — Inline comment block at the bottom with a compact Claude Desktop config snippet.

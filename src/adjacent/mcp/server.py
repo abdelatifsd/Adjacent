@@ -86,6 +86,23 @@ def get_product_recommendations(product_id: str, top_k: int = 10) -> dict[str, A
     return result.to_dict()
 
 
+@mcp.tool()
+def get_products_by_edge_count(limit: int = 20) -> list[dict[str, Any]]:
+    """Return products ordered by number of recommendation edges (most connected first).
+
+    Args:
+        limit: Maximum number of products to return (1–500). Default 20.
+
+    Returns:
+        List of {product_id, edge_count} ordered by edge_count descending.
+    """
+    if _mcp_context is None:
+        raise RuntimeError("MCP server not initialized")
+    neo4j_ctx: Neo4jContext = _mcp_context["neo4j_ctx"]
+    limit = max(1, min(500, limit))
+    return neo4j_ctx.fetch_products_ordered_by_edge_count(limit=limit)
+
+
 @mcp.prompt()
 def find_recommendations(product_id: str) -> str:
     """Generate a prompt to find and explain recommendations for a product.
