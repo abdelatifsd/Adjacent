@@ -7,6 +7,8 @@ import json
 
 from neo4j import GraphDatabase, Driver
 
+from adjacent.db.serialization import sanitize_for_json
+
 
 @dataclass(frozen=True)
 class Neo4jEdgeStoreConfig:
@@ -256,7 +258,7 @@ class Neo4jEdgeStore:
             **props,
             "edge_props": edge_props,
         }
-        return out
+        return sanitize_for_json(out)
 
     def get_neighbors(
         self,
@@ -338,4 +340,4 @@ class Neo4jEdgeStore:
                 }
             )
 
-        return out
+        return sanitize_for_json(out)

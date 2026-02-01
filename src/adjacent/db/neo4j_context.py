@@ -12,6 +12,8 @@ from contextlib import contextmanager
 
 from neo4j import GraphDatabase, Driver
 
+from adjacent.db.serialization import sanitize_for_json
+
 logger = logging.getLogger(__name__)
 
 
@@ -106,7 +108,7 @@ class Neo4jContext:
             result = session.run(cypher, product_id=product_id)
             record = result.single()
             if record:
-                return dict(record["product"])
+                return sanitize_for_json(dict(record["product"]))
         return None
 
     def fetch_products(self, product_ids: list[str]) -> list[Dict[str, Any]]:
@@ -129,7 +131,7 @@ class Neo4jContext:
         """
         with self.driver.session() as session:
             result = session.run(cypher, product_ids=product_ids)
-            return [dict(record["product"]) for record in result]
+            return [sanitize_for_json(dict(record["product"])) for record in result]
 
 
 @contextmanager
