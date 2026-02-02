@@ -617,7 +617,9 @@ As the graph grows, it encodes higher-order structure that can be reused. Node e
 The following features and improvements are planned for future versions:
 
 - [x] **Grafana Visualizations** - Add more dashboards and panels in Grafana using the metrics provided (query latency, inference counts, graph vs vector mix, etc.)
-- [ ] **MCP Integration** - Implement Model Context Protocol server to enable LLM agents to query and reason over the knowledge graph directly
+- [x] **MCP Integration** - Implement Model Context Protocol server to enable LLM agents to query and reason over the knowledge graph directly
+- [ ] **Custom Edge Construction Service** - Deploy a GPU-based LLM inference service using open-source Llama models (e.g., 3B parameter) on AWS to enable custom edge construction as an alternative to OpenAI, reducing cost and enabling self-hosted inference
+- [ ] **GNN-Based Knowledge Graph Analysis** - Investigate the use of constructed knowledge graphs in downstream tasks, including graph neural networks and other techniques for information distillation, representation enrichment, and catalog-level learning
 - [ ] **Evaluation Framework** - Build a validation system for assessing edge quality, including meta-evaluation agents and dataset-specific validation heuristics
 - [ ] **Rate Limiting & Authentication** - Add production-grade API hardening with rate limiting, authentication, and request throttling
 - [ ] **Negative Edge Tracking** - Track candidate pairs that the LLM consistently doesn't connect, preventing redundant inference retries (see [docs/graph_convergence.md](docs/graph_convergence.md))

@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "check-jsonschema>=0.30.0",
+    "mcp>=1.0.0",
     "fastapi>=0.115.0",
     "jsonschema>=4.26.0",
     "neo4j>=5.27.0,<6.0.0",

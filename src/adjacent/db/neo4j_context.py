@@ -7,10 +7,12 @@ ensuring driver reuse across components and proper resource cleanup.
 from __future__ import annotations
 
 import logging
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, List
 from contextlib import contextmanager
 
 from neo4j import GraphDatabase, Driver
+
+from adjacent.db.serialization import sanitize_for_json
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +108,7 @@ class Neo4jContext:
             result = session.run(cypher, product_id=product_id)
             record = result.single()
             if record:
-                return dict(record["product"])
+                return sanitize_for_json(dict(record["product"]))
         return None
 
     def fetch_products(self, product_ids: list[str]) -> list[Dict[str, Any]]:
@@ -129,7 +131,35 @@ class Neo4jContext:
         """
         with self.driver.session() as session:
             result = session.run(cypher, product_ids=product_ids)
-            return [dict(record["product"]) for record in result]
+            return [sanitize_for_json(dict(record["product"])) for record in result]
+
+    def fetch_products_ordered_by_edge_count(
+        self, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        Return products ordered by number of RECOMMENDATION edges (most connected first).
+
+        Args:
+            limit: Maximum number of products to return (1–500).
+
+        Returns:
+            List of dicts with product_id and edge_count, ordered by edge_count descending.
+        """
+        limit = max(1, min(500, limit))
+        cypher = """
+        MATCH (p:Product)-[r:RECOMMENDATION]-()
+        WITH p.id AS product_id, count(r) AS edge_count
+        ORDER BY edge_count DESC
+        LIMIT $limit
+        RETURN product_id, edge_count
+        """
+        with self.driver.session() as session:
+            result = session.run(cypher, limit=limit)
+            rows = [
+                {"product_id": record["product_id"], "edge_count": record["edge_count"]}
+                for record in result
+            ]
+        return sanitize_for_json(rows)
 
 
 @contextmanager
