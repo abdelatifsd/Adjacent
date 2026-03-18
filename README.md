@@ -72,7 +72,7 @@ make dev           # Start everything
 make dev-logs      # View logs
 make dev-status    # Check service health
 make dev-down      # Stop all services
-make dev-clean     # Clean everything (removes volumes)
+make dev-clean     # Clean everything (removes volumes from docker)
 ```
 
 **Run the simulation** (traffic experiment; see [simulate/v1_random_sample/README.md](simulate/v1_random_sample/README.md)):
