@@ -355,11 +355,11 @@ The `edge_id` is computed as `hash(edge_type + from_id + to_id)`, meaning:
 
 ---
 
-## Anchors & Confidence
+## Anchors, Confidence & Reinforcement
 
-An edge becomes trustworthy not because the LLM said so once, but because **it keeps reappearing under different anchors**.
+An edge becomes trustworthy not because the LLM said so once, but because **it keeps reappearing under different anchors**. An anchor is the product that triggered a query — every graph inference is tied to one. Edges are reinforced exclusively by **third-party anchors**: products other than the endpoints of the edge.
 
-### How Reinforcement Works
+### Reinforcement Rules
 
 When the LLM infers an edge, the system checks if that edge already exists:
 
@@ -369,7 +369,7 @@ When the LLM infers an edge, the system checks if that edge already exists:
 | Edge exists, anchor is new | Append anchor to `anchors_seen`, recalculate confidence |
 | Edge exists, anchor already seen | No change (same anchor can't reinforce twice) |
 
-**Example: Candidate↔Candidate Reinforcement**
+**Example lifecycle:**
 
 ```
 Query anchor A → candidates [B, C, D]
@@ -385,42 +385,13 @@ Query anchor G → candidates [B, C, X]
   └── Edge exists! anchors_seen=[A, E, G], confidence=0.70, status=ACTIVE
 ```
 
-**Key insight:** The edge B↔C was discovered from three independent anchor contexts. Reinforcement only happens via third-party anchors — B and C themselves cannot reinforce their own edge.
+B and C themselves cannot reinforce their own edge — once B↔C exists, both endpoints detect the connection via an undirected graph lookup and are filtered out before inference runs.
 
-**Confidence grows via a capped exponential heuristic:**
-- Base confidence: 0.55 (single anchor)
-- Growth rate: 0.15 per additional anchor
-- Hard cap: 0.95 (no false certainty)
-- ACTIVE threshold: 0.70 (typically ~3 distinct anchors)
+### Filtering Logic
 
-### Confidence as a Ranking Signal
+Anchor↔candidate and candidate↔candidate edges are filtered differently:
 
-The confidence score serves a dual purpose: it gates edge status (PROPOSED vs ACTIVE) and provides a natural ranking mechanism during retrieval.
-
-When returning recommendations, products connected via high-confidence edges can be ranked above those with newer, less-validated relationships. This means the system returns not only semantically relevant products but also prioritizes relationships that have been independently validated across multiple anchor contexts.
-
-This ranking signal emerges organically from the reinforcement process. No separate scoring model is required. Edges that survive repeated inference from diverse anchors carry an implicit quality prior, reducing the influence of single-shot LLM errors or context-specific artifacts.
-
-In practice, this enables a two-dimensional ranking strategy:
-
-1. **Relevance**: Which products are related (via edge type and graph structure)
-2. **Reliability**: How well-established is that relationship (via confidence score)
-
-Both dimensions are available at query time without additional computation.
-
----
-
-## Filtering & Reinforcement Logic
-
-### Reinforcement Flow
-
-Edges are reinforced exclusively by **third-party anchors** — products other than the endpoints of the edge.
-
-When A queries and B, C are candidates, the LLM may infer a B↔C edge. Later, when E queries and B, C appear again, that same B↔C edge gets reinforced. B and C querying each other directly cannot reinforce their own edge: once B↔C exists, both endpoints detect the connection via an undirected graph lookup and filter each other out before inference runs.
-
-### Anchor↔Candidate Edges
-
-Before asking the LLM, already-connected vector candidates are filtered out entirely:
+**Anchor↔Candidate:** Already-connected vector candidates are filtered out entirely before the LLM call.
 
 ```
 Query B → C appears as vector candidate
@@ -430,24 +401,19 @@ Check: Does B-C exist?
   └─ Yes → Filter C → No LLM call for B-C
 ```
 
-### Candidate↔Candidate Edges
+**Candidate↔Candidate:** We **do NOT filter** these before the LLM call. Re-inference from different anchors IS the reinforcement mechanism — the current anchor is recorded in `anchors_seen` regardless. This is how the example above works: B↔C is strengthened because independent anchor queries (A, E, G) each led to its discovery.
 
-We **do NOT filter** candidate↔candidate edges before the LLM call.
+### Confidence Scoring
 
-**Why no filtering?**
-- Candidate↔candidate edges are discovered indirectly (via anchor queries)
-- Re-inference from different anchors IS the reinforcement mechanism
-- The current anchor is recorded in `anchors_seen` regardless
+**Confidence grows via a capped exponential heuristic:**
+- Base confidence: 0.55 (single anchor)
+- Growth rate: 0.15 per additional anchor
+- Hard cap: 0.95 (no false certainty)
+- ACTIVE threshold: 0.70 (typically ~3 distinct anchors)
 
-**Example:**
-```
-Query A → candidates [B, C] → LLM infers B↔C → created (anchors_seen=[A])
-Query E → candidates [B, C] → LLM re-infers B↔C → reinforced (anchors_seen=[A, E])
-```
+Confidence serves a dual purpose: it gates edge status (PROPOSED → ACTIVE) and acts as a ranking signal. High-confidence edges are ranked above newer, less-validated ones — no separate scoring model required. This gives two ranking dimensions at query time without additional computation: **relevance** (edge type and graph structure) and **reliability** (confidence score).
 
-The edge B↔C is strengthened because two independent anchor queries both led to its discovery.
-
-**Known tension: candidate-candidate edges constrain future anchor exploration**
+### Known Tension: Candidate-Candidate Edges Constrain Future Exploration
 
 When B is a candidate during A's query, any B↔C edge the LLM infers is incidental — A was the focus, not B. When B is later queried as an anchor, C is already a graph neighbor. C occupies a graph slot and is excluded from inference, so B's own anchor query explores a space already partially shaped by inferences made in someone else's context.
 
