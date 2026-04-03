@@ -302,10 +302,7 @@ When a product `X` is queried:
 ```
 1. Fetch existing graph neighbors of X (Neo4j edges)
 2. If needed, retrieve vector-similar candidates to fill the response to top-K
-3. Decide which *vector* candidates should be sent for async inference (endpoint reinforcement gating):
-   - Not connected → Include
-   - Connected but still “early” → Include (endpoint reinforcement)
-   - Connected and “mature” → Filter out
+3. Filter vector candidates: exclude any already connected to X
 4. Enqueue an async inference job: infer_edges(anchor=X, candidate_ids=[...])
 5. Return recommendations immediately (graph + vector mix)
 6. Worker runs later:
@@ -316,12 +313,6 @@ When a product `X` is queried:
 ```
 
 This loop repeats, gradually enriching the graph with both direct and transitive relationships.
-
-**Key Decision Point (Step 3):**
-- With endpoint reinforcement enabled: already-connected *vector* candidates can be re-sent for inference, but only up to a threshold (default: 3 anchors, confidence < 0.70)
-- After threshold: Only third-party anchors can reinforce the edge
-- This balances fast reinforcement for popular products with efficiency
-- The threshold is configurable via `AsyncConfig.endpoint_reinforcement_threshold` - higher values allow more reinforcement attempts (larger batches, faster convergence) while lower values prioritize efficiency
 
 ---
 
@@ -394,7 +385,7 @@ Query anchor G → candidates [B, C, X]
   └── Edge exists! anchors_seen=[A, E, G], confidence=0.70, status=ACTIVE
 ```
 
-**Key insight:** The edge B↔C was discovered from three different anchor contexts. With endpoint reinforcement enabled, B or C themselves can also serve as anchors (up to the threshold), but after the threshold, only third-party anchors (A, E, G, etc.) can reinforce the edge.
+**Key insight:** The edge B↔C was discovered from three independent anchor contexts. Reinforcement only happens via third-party anchors — B and C themselves cannot reinforce their own edge.
 
 **Confidence grows via a capped exponential heuristic:**
 - Base confidence: 0.55 (single anchor)
@@ -423,77 +414,21 @@ Both dimensions are available at query time without additional computation.
 
 ### Reinforcement Flow
 
-The system uses a **two-phase reinforcement strategy**:
+Edges are reinforced exclusively by **third-party anchors** — products other than the endpoints of the edge.
 
-1. **Endpoint Reinforcement** (when enabled): Edges can be reinforced by querying their endpoints (B or C for edge B-C), but only up to a threshold
-2. **Third-Party Anchor Reinforcement**: After the threshold, edges can only be reinforced via third-party anchors (A, E, G, etc.)
-
-This balances fast reinforcement for popular products with efficiency (avoiding redundant LLM calls).
+When A queries and B, C are candidates, the LLM may infer a B↔C edge. Later, when E queries and B, C appear again, that same B↔C edge gets reinforced. B and C querying each other directly cannot reinforce their own edge: once B↔C exists, both endpoints detect the connection via an undirected graph lookup and filter each other out before inference runs.
 
 ### Anchor↔Candidate Edges
 
-**Default Behavior (Endpoint Reinforcement Enabled):**
-
-Before asking the LLM, we check if candidates are already connected to the anchor:
-- **Not connected**: Include candidate → LLM will create new edge
-- **Connected with low anchors (< threshold)**: Include candidate → LLM will reinforce edge
-- **Connected with high anchors (≥ threshold)**: Filter out → Avoid redundant inference
-
-**Configuration:**
-- `allow_endpoint_reinforcement: bool = True` - Enable/disable endpoint reinforcement
-- `endpoint_reinforcement_threshold: int = 3` - Max anchors_seen count for endpoint reinforcement (configurable to tune batch sizes and convergence behavior)
-- `endpoint_reinforcement_max_confidence: float = 0.70` - Max confidence for endpoint reinforcement
-
-**Note on multiple edge types:** If multiple semantic edge types exist between the same pair (e.g., `A↔C (COMPLEMENTS)` and `A↔C (SUBSTITUTE_FOR)`), endpoint reinforcement gating uses the **maximum** anchors_seen count and **maximum** confidence across those types. This keeps filtering stable and prevents repeatedly re-inferencing a pair once *any* relationship type is already “mature”.
-
-**Flow Diagram:**
+Before asking the LLM, already-connected vector candidates are filtered out entirely:
 
 ```
 Query B → C appears as vector candidate
   ↓
 Check: Does B-C exist?
-  ├─ No → Include C → LLM(B, [C, ...]) → Create B-C
-  └─ Yes → Check metadata:
-      ├─ anchors_seen < threshold AND confidence < 0.70?
-      │   └─ Yes → Include C → LLM(B, [C, ...]) → Reinforce B-C
-      └─ No → Filter C → No LLM call for B-C
+  ├─ No  → Include C → LLM(B, [C, ...]) → Create B-C
+  └─ Yes → Filter C → No LLM call for B-C
 ```
-
-**Example with Endpoint Reinforcement (threshold=3):**
-
-```
-Initial: B-C exists, anchors_seen=[A], confidence=0.55
-
-Query B → C appears as candidate
-  └── Check: B-C has 1 anchor (< threshold of 3)
-  └── Include C → LLM(B, [C, D, E])
-  └── LLM re-infers B-C → anchors_seen=[A, B], confidence=0.63
-
-Query B again → C appears as candidate
-  └── Check: B-C has 2 anchors (< threshold of 3)
-  └── Include C → LLM(B, [C, D, E, F])
-  └── LLM re-infers B-C → anchors_seen=[A, B, B], but B already seen → no change
-
-Query B third time → C appears as candidate
-  └── Check: B-C still has 2 distinct anchors (< threshold of 3)
-  └── Include C → Eventually third-party anchor will reinforce
-
-Query G → candidates [B, C]
-  └── LLM(G, [B, C]) → LLM infers B-C
-  └── anchors_seen=[A, B, G], confidence=0.70 → ACTIVE (threshold reached)
-```
-
-**Why This Design?**
-- **Early edges** (few anchors) benefit from endpoint reinforcement → faster confidence growth
-- **Mature edges** (many anchors) rely on third-party anchors → avoids redundant calls
-- **Popular products** queried frequently can still reinforce their edges (up to threshold)
-- **Efficiency**: Prevents infinite reinforcement loops from repeated endpoint queries
-
-**Legacy Behavior (Endpoint Reinforcement Disabled):**
-
-If `allow_endpoint_reinforcement=False`, all connected candidates are filtered out:
-- Reinforcement only happens via **reciprocal discovery** (query B, find A as candidate)
-- More conservative, but edges may take longer to reach ACTIVE status
 
 ### Candidate↔Candidate Edges
 
@@ -511,6 +446,14 @@ Query E → candidates [B, C] → LLM re-infers B↔C → reinforced (anchors_se
 ```
 
 The edge B↔C is strengthened because two independent anchor queries both led to its discovery.
+
+**Known tension: candidate-candidate edges constrain future anchor exploration**
+
+When B is a candidate during A's query, any B↔C edge the LLM infers is incidental — A was the focus, not B. When B is later queried as an anchor, C is already a graph neighbor. C occupies a graph slot and is excluded from inference, so B's own anchor query explores a space already partially shaped by inferences made in someone else's context.
+
+The compounding effect: by the time B is queried directly, it may already have a dense neighborhood built from incidental candidate-candidate inferences across many prior anchor queries. Its own anchor query — the one where it is the explicit subject — contributes the least new information.
+
+**Future direction:** Edge provenance is already tracked via `created_kind` (`anchor_candidate` vs `candidate_candidate`). A future adjustment could use this to give anchor-inferred edges priority in neighbor retrieval, and exclude candidate-inferred edges below a confidence threshold from the graph slot count — preserving more exploration budget for when a product is queried as an anchor directly.
 
 ---
 
