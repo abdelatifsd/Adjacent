@@ -156,7 +156,7 @@ Get recommendations for a product.
   "recommendations": [
     {
       "product_id": "prod-456",
-      "edge_type": "COMPLEMENTS",
+      "edge_type": "PAIRS_WITH",
       "confidence": 0.70,
       "source": "graph",
       "score": null

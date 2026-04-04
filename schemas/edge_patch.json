@@ -10,7 +10,7 @@
   "properties": {
     "edge_type": {
       "type": "string",
-      "enum": ["SIMILAR_TO", "COMPLEMENTS", "SUBSTITUTE_FOR", "OFTEN_USED_WITH"],
+      "enum": ["SUBSTITUTE_FOR", "PAIRS_WITH"],
       "description": "Canonical relationship type. In v1, all relationship types are symmetric."
     },
 

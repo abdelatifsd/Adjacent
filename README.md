@@ -207,7 +207,7 @@ Zoom in to inspect the relationship types and structure:
 
 <img src="assets/examples/formed_graph_neo4j_zoomed_in.png" alt="Graph forming - zoomed in" width="800">
 
-Each edge represents an LLM-inferred relationship (`SIMILAR_TO`, `COMPLEMENTS`, etc.) that will be reinforced as more queries pass through.
+Each edge represents an LLM-inferred relationship (`SUBSTITUTE_FOR`, `PAIRS_WITH`) that will be reinforced as more queries pass through.
 
 ### 4. Monitor System Behavior in Grafana
 
@@ -328,28 +328,23 @@ All recommendation edges are:
 
 ### Edge Types (v1)
 
-| Type | Description |
-|------|-------------|
-| `SIMILAR_TO` | Products with similar attributes/purpose |
-| `COMPLEMENTS` | Products that work well together |
-| `SUBSTITUTE_FOR` | Products that can replace each other |
-| `OFTEN_USED_WITH` | Products commonly used in conjunction |
+Adjacent uses two orthogonal relationship primitives — chosen to span the full space of meaningful product relationships while minimizing ambiguous overlap. The goal is that the LLM can apply a single clean decision test for every product pair, rather than adjudicating vague boundaries between overlapping gradations.
+
+| Type | Description | Decision test |
+|------|-------------|---------------|
+| `SUBSTITUTE_FOR` | Products that serve the same need and are interchangeable | Would a user want this *instead of* the anchor? |
+| `PAIRS_WITH` | Products that work together, enhance each other, or commonly co-appear | Would a user want this *alongside* the anchor? |
 
 > **Note:** No behavioral semantics are assumed. These are world-knowledge relationships, not user-interaction claims.
 
 ### Edge Type Uniqueness
 
-**Important design decision:** Multiple edge types can exist between the same product pair.
+**Design decision:** Multiple edge types can exist between the same product pair.
 
 The `edge_id` is computed as `hash(edge_type + from_id + to_id)`, meaning:
-- `B↔C (COMPLEMENTS)` and `B↔C (SUBSTITUTE_FOR)` are **separate edges**
+- `B↔C (SUBSTITUTE_FOR)` and `B↔C (PAIRS_WITH)` are **separate edges**
 - Each has its own `anchors_seen` and confidence score
-- Both can coexist in the graph
-
-**Why allow this?**
-- A product pair may genuinely have multiple relationship types
-- Example: A keyboard COMPLEMENTS a mouse AND is OFTEN_USED_WITH a mouse
-- The LLM prompt instructs "choose the single best edge_type" per call, but different anchor contexts may yield different judgments
+- Both can coexist in the graph (a product pair can be substitutable in one context and commonly paired in another)
 
 **Implication:** When querying recommendations, you may see the same product pair with different edge types. The one with higher confidence (more anchors) is typically more reliable.
 
@@ -373,15 +368,15 @@ When the LLM infers an edge, the system checks if that edge already exists:
 
 ```
 Query anchor A → candidates [B, C, D]
-  └── LLM infers B↔C (COMPLEMENTS)
+  └── LLM infers B↔C (PAIRS_WITH)
   └── Edge created: B↔C, anchors_seen=[A], confidence=0.55, status=PROPOSED
 
 Query anchor E → candidates [B, C, F]
-  └── LLM re-infers B↔C (COMPLEMENTS)
+  └── LLM re-infers B↔C (PAIRS_WITH)
   └── Edge exists! anchors_seen=[A, E], confidence=0.63, status=PROPOSED
 
 Query anchor G → candidates [B, C, X]
-  └── LLM re-infers B↔C (COMPLEMENTS)
+  └── LLM re-infers B↔C (PAIRS_WITH)
   └── Edge exists! anchors_seen=[A, E, G], confidence=0.70, status=ACTIVE
 ```
 
