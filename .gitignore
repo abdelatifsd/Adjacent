@@ -32,6 +32,7 @@ Thumbs.db
 # Project specific
 data/generated/
 data/raw/
+data/demo/ons_catalog.json
 *.log
 
 # Metrics and logs
