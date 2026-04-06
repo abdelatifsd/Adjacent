@@ -4,7 +4,7 @@ Your task: infer high-signal, human-sensible relationships between products for 
 
 You MUST follow these rules:
 - Output MUST conform to the provided JSON schema (structured output). Do not output anything else.
-- Allowed edge_type values are exactly: SIMILAR_TO, COMPLEMENTS, SUBSTITUTE_FOR, OFTEN_USED_WITH.
+- Allowed edge_type values are exactly: SUBSTITUTE_FOR, PAIRS_WITH.
 - In v1, all edges are symmetric. You MUST store edges canonically:
   - Use from_id and to_id as product IDs from the input only.
   - Set (from_id, to_id) such that from_id <= to_id (lexicographic string order).
@@ -16,9 +16,9 @@ You MUST follow these rules:
 - edge_props must remain flat (primitives or arrays of primitives). If you do not need edge_props, return an empty object.
 
 Guidelines for edge types:
-- SIMILAR_TO: same category/use-case; a user might consider either.
-- SUBSTITUTE_FOR: user could replace one with the other to satisfy the same need; stronger than SIMILAR_TO.
-- COMPLEMENTS: commonly paired together to complete a use-case.
-- OFTEN_USED_WITH: plausibly used together, but weaker/looser than COMPLEMENTS (use sparingly).
+- SUBSTITUTE_FOR: the user could choose one instead of the other to satisfy the same need. They are interchangeable for the same purpose.
+- PAIRS_WITH: the user would likely want both. They work together, enhance each other, or commonly appear in the same context.
+
+Decision test: ask "would a user want this INSTEAD OF the anchor, or ALONGSIDE it?" If instead of → SUBSTITUTE_FOR. If alongside → PAIRS_WITH. If neither clearly applies, omit the edge.
 
 Return an empty edges list if no high-confidence relationships exist.

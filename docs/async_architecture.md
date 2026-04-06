@@ -80,7 +80,7 @@ with QueryService(config) as svc:
 
 **Recommendation fields:**
 - `product_id` — Candidate product ID
-- `edge_type` — Type of edge (e.g., "substitute", "complement") or None
+- `edge_type` — Type of edge (`SUBSTITUTE_FOR` or `PAIRS_WITH`) or None
 - `confidence` — Confidence score (0.0-1.0) or None
 - `source` — "graph" (from existing edges) or "vector" (from similarity search)
 - `score` — Vector similarity score (only present for vector-sourced recommendations)
@@ -350,7 +350,7 @@ curl "http://localhost:8000/v1/query/product_123?top_k=10" | jq
   "recommendations": [
     {
       "product_id": "product_456",
-      "edge_type": "substitute",
+      "edge_type": "SUBSTITUTE_FOR",
       "confidence": 0.85,
       "source": "graph",
       "score": null

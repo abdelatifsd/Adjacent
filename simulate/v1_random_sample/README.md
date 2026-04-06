@@ -18,7 +18,7 @@ Adjacent's core thesis is that lazy, query-anchored graph construction can reduc
 ## What Gets Optimized
 
 - **Reduced vector reliance**: As graph edges materialize, fewer recommendations need expensive vector searches
-- **Improved semantic quality**: Graph edges (COMPLEMENTS, SUBSTITUTE_FOR, etc.) capture relationships that pure vector similarity misses
+- **Improved semantic quality**: Graph edges (SUBSTITUTE_FOR, PAIRS_WITH) capture relationships that pure vector similarity misses
 - **LLM cost amortization**: Hot products amortize LLM inference costs across many queries
 - **Query latency**: Graph traversal is faster than vector search at scale
 

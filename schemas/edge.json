@@ -16,10 +16,8 @@
     "edge_type": {
       "type": "string",
       "enum": [
-        "SIMILAR_TO",
-        "COMPLEMENTS",
         "SUBSTITUTE_FOR",
-        "OFTEN_USED_WITH"
+        "PAIRS_WITH"
       ],
       "description": "Canonical relationship type used for recommendation logic. In v1, all relationship types are symmetric."
     },

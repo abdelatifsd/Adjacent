@@ -52,15 +52,6 @@ class AsyncConfig:
     # Worker settings
     job_timeout: int = 300  # 5 minutes max per job
 
-    # Endpoint reinforcement settings
-    allow_endpoint_reinforcement: bool = True  # Enable endpoint reinforcement
-    endpoint_reinforcement_threshold: int = (
-        3  # Only reinforce if anchors_seen count < this value (configurable)
-    )
-    endpoint_reinforcement_max_confidence: float = (
-        0.70  # Don't reinforce if confidence >= this
-    )
-
     def __post_init__(self):
         """Convert string paths to Path objects after deserialization."""
         # Handle paths that might come in as strings (from Redis serialization)
