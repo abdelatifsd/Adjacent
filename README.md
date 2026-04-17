@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="assets/brand/adjacent-logo.png" alt="Adjacent Logo" width="420">
+# Adjacent
+
+<img src="assets/brand/adjacent-logo.png" alt="Adjacent — open-source cold-start recommendation and knowledge graph framework" width="420">
 
 </div>
 
@@ -40,7 +42,7 @@ Get Adjacent running in 5 minutes:
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/abdelatifsd/adjacent.git
 cd adjacent
 
 # Run setup script (installs dependencies, creates .env)
