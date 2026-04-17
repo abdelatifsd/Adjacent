@@ -321,9 +321,7 @@ class QueryService:
                                 product_id, all_candidate_ids
                             )
                             new_candidates = [
-                                cid
-                                for cid in all_candidate_ids
-                                if cid not in connected
+                                cid for cid in all_candidate_ids if cid not in connected
                             ]
 
                             if new_candidates:
